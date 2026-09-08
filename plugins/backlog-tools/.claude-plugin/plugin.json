@@ -1,6 +1,6 @@
 {
   "name": "backlog-tools",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "description": "백로그·스탠드업 스킬 셋 — 끼어든 요구·사람 몫·장기 방향을 docs/BACKLOG.md 한 문서에 모으고, 편집은 손이 아니라 명령으로만 한다. 외부 의존성 0(node 코어만).",
   "author": {
     "name": "KyungsooLee"

@@ -68,9 +68,11 @@ import { repoRoot } from "./lib/git-status.mjs";
 import {
   MINE_HEADING_LINE,
   PLACEHOLDER,
+  VIA_FORBIDDEN,
   adrMentions,
   adrReleaseDates,
   daysBetween,
+  detectVia,
   firstSentence,
   flatten,
   mineSectionInsertAt,
@@ -101,11 +103,12 @@ const STALE_DAYS = 30;
 const USAGE = `사용법:
   ${SELF} init [--root <dir>]
     docs/BACKLOG.md 골격을 만든다. 이미 있으면 아무것도 하지 않는다.
-  ${SELF} add "<제목 [— 요약]>" [--date YYYY-MM-DD] [--context "…"] [--root <dir>]
-  ${SELF} add --long "<제목>" --state "…" --next "…" --open "…" [--todo "…"]… [--done "…"]… [--date YYYY-MM-DD] [--root <dir>]
+  ${SELF} add "<제목 [— 요약]>" [--date YYYY-MM-DD] [--context "…"] [--via <도구>] [--root <dir>]
+  ${SELF} add --long "<제목>" --state "…" --next "…" --open "…" [--todo "…"]… [--done "…"]… [--date YYYY-MM-DD] [--via <도구>] [--root <dir>]
   ${SELF} progress B-N [--todo "…"]… [--done "…"]… [--check <n|본문>]… [--uncheck <n|본문>]… [--root <dir>]
     --todo/--done: 없으면 더하고, 이미 있으면 그 상태로 맞춘다. --check/--uncheck: 번호(1부터)나 본문 일부로 골라 토글한다.
-  ${SELF} mine add "<할 것 [— 설명]>" --source "…" [--date YYYY-MM-DD] [--root <dir>]
+  ${SELF} mine add "<할 것 [— 설명]>" --source "…" [--date YYYY-MM-DD] [--via <도구>] [--root <dir>]
+    --via: 그 줄을 적은 도구를 직접 적는다. 없으면 환경 변수로 짐작하고(claude·codex·gemini), 그것도 없으면 빈 칸이다.
   ${SELF} mine done <n|본문> [--root <dir>]
   ${SELF} mine list [--json] [--root <dir>]
   ${SELF} done <n|본문> [--root <dir>]
@@ -122,7 +125,7 @@ function fail(message) {
 }
 
 /** 값을 받는 옵션과 받지 않는 옵션. 모르는 `--옵션`은 조용히 넘기지 않고 멈춘다. */
-const VALUE_FLAGS = new Set(["--date", "--context", "--source", "--root", "--state", "--next", "--open", "--section"]);
+const VALUE_FLAGS = new Set(["--date", "--context", "--source", "--root", "--state", "--next", "--open", "--section", "--via"]);
 const BOOL_FLAGS = new Set(["--json", "--force"]);
 /** 여러 번 올 수 있는 옵션 — 값이 덮이지 않고 배열로 쌓인다(진행 항목은 한 번에 여럿이다). */
 const ARRAY_FLAGS = new Set(["--todo", "--done", "--check", "--uncheck"]);
@@ -253,6 +256,28 @@ function checkDate(value, where) {
 }
 
 /**
+ * 이 줄을 적은 도구 (ADR-121). `--via`가 이기고, 없으면 환경 변수로 짐작하며,
+ * 그것도 없으면 기록하지 않는다(사람이 직접 친 것이라 빈 칸이 정직하다).
+ *
+ * **괄호와 쉼표가 든 `--via`는 조용히 고치지 않고 거절한다** (리뷰 H1 ②). 그 글자들이
+ * 줄에 들어가면 꼬리 괄호의 구분이 깨져 다음에 읽을 때 날짜와 맥락까지 요약으로
+ * 흡수된다 — 에러 없이, 영구히. 사람이 친 값을 말없이 다듬으면 문서에 무엇이 적혔는지
+ * 모르게 되므로, 여기서는 멈추고 알린다(렌더러의 `sanitizeVia`는 그 뒤의 마지막
+ * 방어선이지 이 검사의 대체가 아니다).
+ */
+function resolveVia(options) {
+  const explicit = options.via;
+  if (explicit !== undefined && VIA_FORBIDDEN.test(explicit)) {
+    fail(
+      `--via 값에는 괄호와 쉼표를 쓸 수 없습니다: ${JSON.stringify(explicit)}\n` +
+        `  그 글자들은 줄 꼬리 \`(날짜, 맥락, 작성: 도구)\`의 구분을 깨뜨립니다.\n` +
+        `  도구 이름 하나만 넘기세요 (예: --via codex). 아무것도 안 하고 멈췄습니다.`,
+    );
+  }
+  return detectVia(process.env, explicit);
+}
+
+/**
  * 맥락은 브랜치 이름에서만 유추한다 — `feature/x`는 "x 작업 중", `hotfix/x`는
  * "x 수정 중". 그 밖(main·release·분리된 HEAD)에서는 **추측하지 않고 묻는다**:
  * 틀린 맥락이 적힌 줄은 맥락이 없는 줄보다 나쁘다(ADR-091 트레이드오프).
@@ -306,7 +331,8 @@ function commandAddPending(options, positional) {
 
   const date = options.date ? checkDate(options.date, "--date") : todayInSeoul();
   const context = options.context?.trim() || deriveContext(root);
-  const line = renderPendingLine({ title, summary, date, context });
+  const via = resolveVia(options);
+  const line = renderPendingLine({ title, summary, date, context, via });
 
   const lines = text.split("\n");
   lines.splice(pending.insertAt, 0, line);
@@ -353,6 +379,7 @@ function commandAddLong(options, positional) {
     state: flatten(options.state),
     next: flatten(options.next),
     open: flatten(options.open),
+    via: resolveVia(options),
     progress: seeded,
   });
 
@@ -465,7 +492,7 @@ function commandMineAdd(options, positional) {
     process.exit(0);
   }
 
-  const line = renderPendingLine({ title, summary, date, context: source });
+  const line = renderPendingLine({ title, summary, date, context: source, via: resolveVia(options) });
   const lines = text.split("\n");
   lines.splice(mine.insertAt, 0, line);
   // 자리표시자는 새 줄이 들어온 **뒤에** 지운다 — 먼저 지우면 끼워 넣을 자리가 밀린다.
@@ -752,6 +779,7 @@ export function collect(root) {
       summary: item.summary,
       date: item.date,
       context: item.context,
+      via: item.via,
       ageDays,
       adrs,
       warnings: warningsFor({ adrs, ageDays, date: item.date }, existingAdrs, adrReleases),
@@ -769,6 +797,7 @@ export function collect(root) {
       summary: item.summary,
       date: item.date,
       source: item.context,
+      via: item.via,
       ageDays,
       warnings: warningsFor({ ageDays }, existingAdrs, adrReleases),
     };
@@ -791,6 +820,7 @@ export function collect(root) {
       open: section.open,
       progress,
       depends: section.depends,
+      via: section.via,
       adrs: section.adrs,
       futureAdrs,
       // 장기 절의 "적은 날"은 머리의 `(YYYY-MM-DD)`다. 없는 절(B-1~B-7 같은 옛
@@ -810,10 +840,11 @@ export function renderPendingTable(pending) {
     truncate(item.summary ? `${item.title} — ${item.summary}` : item.title, 52),
     item.date ?? "?",
     truncate(item.context ?? "?", 28),
+    item.via ?? "",
     item.ageDays === undefined ? "?" : `${item.ageDays}일`,
     item.warnings.join("; "),
   ]);
-  return `## 대기 중인 요구\n\n${renderTable(["#", "제목", "들어온 날", "맥락", "경과일", "⚠"], rows)}`;
+  return `## 대기 중인 요구\n\n${renderTable(["#", "제목", "들어온 날", "맥락", "작성", "경과일", "⚠"], rows)}`;
 }
 
 /**
@@ -829,10 +860,11 @@ export function renderMineTable(mine) {
     truncate(item.summary ? `${item.title} — ${item.summary}` : item.title, 52),
     item.date ?? "?",
     truncate(item.source ?? "?", 28),
+    item.via ?? "",
     item.ageDays === undefined ? "?" : `${item.ageDays}일`,
     item.warnings.join("; "),
   ]);
-  return `## 사람 몫\n\n${renderTable(["#", "할 것", "적은 날", "출처", "경과일", "⚠"], rows)}`;
+  return `## 사람 몫\n\n${renderTable(["#", "할 것", "적은 날", "출처", "작성", "경과일", "⚠"], rows)}`;
 }
 
 function progressRatio(progress) {
@@ -848,10 +880,11 @@ export function renderLongTable(longTerm) {
     truncate(section.stateFirstSentence ?? "?", 52),
     progressRatio(section.progress),
     truncate(section.depends ?? "", 28),
+    section.via ?? "",
     section.adrs.map(adrTag).join("·"),
     section.warnings.join("; "),
   ]);
-  return `## 장기 방향\n\n${renderTable(["번호", "제목", "현 상태(첫 문장)", "진행", "의존", "관련 ADR", "⚠"], rows)}`;
+  return `## 장기 방향\n\n${renderTable(["번호", "제목", "현 상태(첫 문장)", "진행", "의존", "작성", "관련 ADR", "⚠"], rows)}`;
 }
 
 /**

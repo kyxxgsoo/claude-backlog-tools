@@ -44,8 +44,88 @@ export const PLACEHOLDER = "- (없음)";
 /** `- **제목** …` 한 줄에서 제목과 나머지를 뽑는다. */
 const PENDING_ITEM = /^-\s+\*\*(.+?)\*\*\s*(.*)$/;
 
-/** 줄 끝의 `(YYYY-MM-DD, 맥락)`. 맥락은 없어도 된다. */
-const PENDING_META = /\((\d{4}-\d{2}-\d{2})(?:\s*,\s*([^()]*))?\)\s*$/;
+/**
+ * 줄 끝의 꼬리 괄호 `(YYYY-MM-DD, 맥락, 작성: claude)` — 맥락도 작성도 없어도 된다.
+ *
+ * **날짜에 앵커한다.** 여는 괄호 바로 뒤에 `YYYY-MM-DD`가 오는 자리만 꼬리로 치고,
+ * 거기서부터 줄 끝의 `)`까지를 **탐욕적으로** 잡는다. 그래서 맥락 안의 괄호가
+ * 살아남는다 — `(2026-09-08, 회의(주간) 중 들어옴)`은 한국어에서 조금도 드물지
+ * 않은데, 괄호 문자를 하나도 허용하지 않으면 매치가 통째로 실패해 날짜·맥락·작성이
+ * **에러 없이 영구히** 요약으로 흡수된다(리뷰 H1).
+ *
+ * 앞의 `([\s\S]*)`가 탐욕적인 것이 중요하다 — 되돌아오며 **가장 오른쪽의** 날짜
+ * 괄호를 고른다. 요약이 `(2026-01-01 회고)` 같은 괄호를 품고 줄이 `)`로 끝나도
+ * 진짜 꼬리가 이긴다. 이 그룹의 길이가 곧 "꼬리 앞까지의 본문"이라, 부르는 쪽은
+ * `m.index`가 아니라 이 그룹을 쓴다(앞이 탐욕적이라 `m.index`는 언제나 0이다).
+ *
+ * 날짜로 시작하는 괄호가 없으면 **꼬리로 치지 않는다** — 요약이 `(웹오디오) 검토.`
+ * 처럼 괄호로 끝나는 줄에서 그 괄호를 메타로 오해하지 않으려는 것이고, 이것이 옛
+ * 정규식(날짜를 앞에서 요구하던)의 계약 그대로다.
+ */
+const PENDING_META = /^([\s\S]*)\((\d{4}-\d{2}-\d{2})(?:\s*,\s*([\s\S]*))?\)\s*$/;
+
+/**
+ * 꼬리 괄호 **안**의 마지막 조각 `[, ]작성: <도구>`.
+ *
+ * 앞이 쉼표든 조각의 시작이든 받는다 — 맥락 없이 작성만 있는 꼬리
+ * (`(2026-09-08, 작성: claude)`)에서는 날짜 뒤의 쉼표가 이미 잘려 나가 조각이
+ * 「작성:」으로 시작한다. 도구 이름에는 쉼표도 괄호도 없다(쓰는 쪽이 `sanitizeVia`로
+ * 막고, `--via`는 CLI가 거절한다).
+ */
+const META_VIA = /(?:^|,)\s*작성:\s*([^,()]*?)\s*$/;
+
+/** 「작성」 칸의 이름 — 대기·사람 몫 줄의 꼬리와 장기 절의 칸이 같은 낱말을 쓴다. */
+export const VIA_FIELD = "작성";
+
+/**
+ * 도구 이름에 들어와서는 안 되는 글자 — 꼬리 괄호와 칸 구분을 깨뜨린다.
+ *
+ * **`g` 플래그를 붙이지 않는다**: `.test()`로 검사하는 쪽(CLI)이 있는데 전역 정규식은
+ * `lastIndex`를 들고 다녀 같은 값에 대해 true/false를 번갈아 낸다. 지우는 쪽은
+ * 아래에서 따로 만든다.
+ */
+export const VIA_FORBIDDEN = /[(),]/;
+
+/** 지우기 전용 — 위와 같은 글자 집합이되 전역이라 **전부** 떼어낸다. */
+const VIA_FORBIDDEN_ALL = /[(),]/g;
+
+/**
+ * 도구 이름을 **줄에 적어도 안전한 모양**으로 (리뷰 H1 ②).
+ *
+ * 괄호와 쉼표를 떼어 낸다 — 그것들이 들어가면 꼬리 괄호의 구분이 깨져 다음에 읽을
+ * 때 날짜와 맥락이 통째로 요약으로 흡수된다. `--via`는 CLI가 **거절**하지만
+ * (틀린 값을 조용히 고쳐 주면 사람이 무엇이 적혔는지 모른다), 렌더러는 부르는 곳이
+ * 여럿이라 마지막 방어선으로 조용히 정리한다. 환경에서 온 값은 `claude`·`codex`·
+ * `gemini` 셋 중 하나라 이 경로를 타지 않는다.
+ */
+export function sanitizeVia(via) {
+  return flatten(String(via ?? "").replace(VIA_FORBIDDEN_ALL, "")) || undefined;
+}
+
+/**
+ * 이 줄을 **어느 도구가 적었나** (ADR-121).
+ *
+ * `explicit`(`--via`)이 언제나 이긴다. 없으면 환경 변수로 **짐작**한다: Claude Code는
+ * `CLAUDECODE`/`CLAUDE_CODE_*`를, Codex CLI는 `CODEX_*`를, Gemini CLI는 `GEMINI_CLI`를
+ * 심는다. 아무것도 없으면 **기록하지 않는다** — 사람이 터미널에서 직접 친 것이고,
+ * 그때는 빈 칸이 정직하다(모르는 것을 `사람`이라 적으면 그것도 짐작이다).
+ *
+ * **짐작은 힌트일 뿐이다.** 환경 변수는 누구나 만들 수 있고, `CODEX_*` 갈래는 이
+ * 기계에 codex CLI가 없어 **실측으로 확인하지 못했다**(알려진 접두사를 따랐다).
+ * 그래서 `--via`가 위에 있고, 틀린 값을 본 사람이 언제든 덮어쓸 수 있다.
+ *
+ * 값이 **빈 문자열이면 없는 것으로 본다** — 테스트와 스크립트가 `CLAUDECODE=""`로
+ * 짐작을 끌 수 있어야 하고, 빈 값이 든 변수는 "그 도구 안"이라는 증거가 못 된다.
+ */
+export function detectVia(env = {}, explicit) {
+  const named = flatten(explicit).toLowerCase();
+  if (named) return named;
+  const has = (test) => Object.entries(env).some(([key, value]) => test(key) && String(value ?? "") !== "");
+  if (has((key) => key === "CLAUDECODE" || key.startsWith("CLAUDE_CODE_"))) return "claude";
+  if (has((key) => key.startsWith("CODEX_"))) return "codex";
+  if (has((key) => key === "GEMINI_CLI")) return "gemini";
+  return undefined;
+}
 
 /**
  * `- **이름**: 값` 한 줄. 이름 뒤에 `(2026-08-25, ADR-028)` 같은 꼬리표가 붙는
@@ -210,11 +290,15 @@ function parseListSection(text, heading) {
 }
 
 /**
- * 대기 줄 하나 → `{ title, summary, date, context }`.
+ * 대기 줄 하나 → `{ title, summary, date, context, via }`.
  *
  * 형식이 아닌 옛 줄도 읽는다: 굵은 제목이 없으면 줄 전체가 제목이고, 꼬리
  * `(날짜, 맥락)`이 없으면 날짜와 맥락이 빈다. **모르는 모양에 터지지 않는 것**이
  * 이 함수의 계약이다.
+ *
+ * `via`(ADR-121)도 같은 자세다 — **작성 조각이 없는 옛 줄이 그대로 읽혀야 한다.**
+ * 문서의 모든 줄은 이 기능이 생기기 전에 적혔고 소급해서 채우지 않으므로, 빈
+ * `via`가 정상이자 다수다.
  */
 export function parsePendingLine(line) {
   const body = line.replace(/^-\s+/, "");
@@ -222,13 +306,32 @@ export function parsePendingLine(line) {
   const title = m ? m[1].trim() : flatten(body);
   let rest = m ? m[2] : "";
 
+  // 앞 그룹이 탐욕적이라 `m.index`는 언제나 0이다 — 꼬리 앞까지의 본문은 그룹 1이다.
   const meta = PENDING_META.exec(rest);
-  const date = meta ? meta[1] : undefined;
-  const context = meta && meta[2] ? meta[2].trim() : undefined;
-  if (meta) rest = rest.slice(0, meta.index);
+  const parsed = meta ? parseMeta(meta[2], meta[3]) : undefined;
+  if (parsed) rest = meta[1];
 
   const summary = flatten(rest.replace(/^\s*—\s*/, "")).replace(/\.$/, "");
-  return { title, summary: summary || undefined, date, context };
+  return { title, summary: summary || undefined, date: parsed?.date, context: parsed?.context, via: parsed?.via };
+}
+
+/**
+ * 날짜와 **그 뒤의 나머지** → `{ date, context, via }`.
+ *
+ * 작성 조각은 **맨 끝에서 떼어낸다.** 맥락에는 쉼표도 괄호도 들 수 있어서
+ * (`ADR-082, 2026-09-02 대화`, `회의(주간) 중 들어옴`) 구분자로 셋을 가를 수 없지만,
+ * 작성만은 언제나 줄 맨 끝이라 뒤에서부터 확실히 잘라낼 수 있다. 날짜는 정규식이
+ * 이미 앵커로 확인했으므로 여기서 다시 보지 않는다.
+ */
+function parseMeta(date, tail) {
+  let context = String(tail ?? "");
+  let via;
+  const viaMatch = META_VIA.exec(context);
+  if (viaMatch) {
+    via = viaMatch[1].trim() || undefined;
+    context = context.slice(0, viaMatch.index);
+  }
+  return { date, context: context.trim() || undefined, via };
 }
 
 /**
@@ -321,11 +424,13 @@ const FIELD_ALIASES = {
   next: ["잔여 방향", "방향"],
   open: ["미결 질문"],
   depends: ["의존"],
+  // 「작성」은 값 한 낱말짜리 칸이다(ADR-121) — 없는 절이 정상이고 다수다.
+  via: [VIA_FIELD],
   progress: [PROGRESS_FIELD],
 };
 
 function normalizeFields(bullets) {
-  const out = { state: undefined, next: undefined, open: undefined, depends: undefined, progress: [], progressLine: -1, extras: [] };
+  const out = { state: undefined, next: undefined, open: undefined, depends: undefined, via: undefined, progress: [], progressLine: -1, extras: [] };
   const taken = new Set();
   for (const [key, aliases] of Object.entries(FIELD_ALIASES)) {
     for (const alias of aliases) {
@@ -353,9 +458,12 @@ function normalizeFields(bullets) {
  * 요약이 없으면 `- **제목** — 제목.`이 되지 않게 **제목만** 쓴다 — 같은 말을 두 번
  * 적은 줄은 표에서 한 칸을 낭비하고 사람에게 아무것도 알려 주지 않는다.
  */
-export function renderPendingLine({ title, summary, date, context }) {
+export function renderPendingLine({ title, summary, date, context, via }) {
   const head = `- **${title}**`;
-  const tail = context ? `(${date}, ${context})` : `(${date})`;
+  // 순서는 언제나 날짜 → 맥락 → 작성이다. 맥락 없이 작성만 있는 줄
+  // (`(날짜, 작성: claude)`)도 이 규칙 하나로 나오고, 읽는 쪽이 뒤에서부터 뗀다.
+  const safeVia = sanitizeVia(via);
+  const tail = `(${[date, context, safeVia ? `${VIA_FIELD}: ${safeVia}` : undefined].filter(Boolean).join(", ")})`;
   if (!summary) return `${head} ${tail}`;
   const closed = /[.!?…]$/.test(summary) ? summary : `${summary}.`;
   return `${head} — ${closed} ${tail}`;
@@ -398,8 +506,12 @@ export function mineSectionInsertAt(lines) {
  * 진행은 **선택**이라(ADR-092 ①) `progress`를 넘길 때만 넷째 칸이 붙는다 — 세 칸
  * 강제는 그대로다.
  */
-export function renderLongSection({ number, title, date, state, next, open, progress }) {
+export function renderLongSection({ number, title, date, state, next, open, via, progress }) {
   const lines = [`## B-${number}. ${title} (${date})`, `- **현 상태**: ${state}`, `- **잔여 방향**: ${next}`, `- **미결 질문**: ${open}`];
+  // 작성은 미결 질문 **뒤**, 진행 **앞**이다 — 세 칸은 절의 내용이고 작성은 그
+  // 절을 누가 적었나라, 내용 다음이자 체크리스트 앞이 제 자리다(ADR-121).
+  const safeVia = sanitizeVia(via);
+  if (safeVia) lines.push(`- **${VIA_FIELD}**: ${safeVia}`);
   if (progress?.length > 0) lines.push(renderProgressBlock(progress));
   return lines.join("\n");
 }
