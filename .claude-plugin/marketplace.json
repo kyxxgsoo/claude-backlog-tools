@@ -1,0 +1,14 @@
+{
+  "name": "kyxxgsoo-tools",
+  "owner": {
+    "name": "KyungsooLee"
+  },
+  "plugins": [
+    {
+      "name": "backlog-tools",
+      "source": "./plugins/backlog-tools",
+      "description": "백로그·스탠드업 — docs/BACKLOG.md를 명령으로만 다루는 스킬 셋 (Karvis에서 추출)"
+    }
+  ],
+  "description": "백로그·스탠드업 스킬 셋 — docs/BACKLOG.md를 명령으로만 다룬다 (Karvis에서 추출)"
+}
