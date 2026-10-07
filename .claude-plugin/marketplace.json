@@ -8,7 +8,12 @@
       "name": "backlog-tools",
       "source": "./plugins/backlog-tools",
       "description": "백로그·스탠드업 — docs/BACKLOG.md를 명령으로만 다루는 스킬 셋 (Karvis에서 추출)"
+    },
+    {
+      "name": "orca-pipeline",
+      "source": "./plugins/orca-pipeline",
+      "description": "Orca 조율자 파이프라인 — Codex 계획·Claude 검증·Claude 구현·Codex 리뷰를 Orca 워커로 돌리는 스킬 키트 (Karvis에서 추출)"
     }
   ],
-  "description": "백로그·스탠드업 스킬 셋 — docs/BACKLOG.md를 명령으로만 다룬다 (Karvis에서 추출)"
+  "description": "kyxxgsoo 도구 모음 — 백로그·스탠드업 스킬 셋, Orca 조율자 파이프라인 (Karvis에서 추출)"
 }

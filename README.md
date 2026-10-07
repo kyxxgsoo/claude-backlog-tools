@@ -101,3 +101,42 @@ node --test plugins/backlog-tools/scripts/__tests__/*.test.mjs
 ## 라이선스
 
 MIT
+
+---
+
+# orca-pipeline
+
+Orca 조율자 파이프라인 — 이 세션(Orca 터미널 안의 Claude Code)이 조율자가 되어
+Orca 워커로 **계획(Codex) → 교차 검증(Claude, 최대 3판) → 승인 관문 → 구현(Claude,
+새 worktree) → 차이 리뷰(Codex, 최대 2판) → 출시(git 서브에이전트) → 배포**를 돈다.
+서로 다른 모델이 서로를 검증하고, 결정은 조율자만 내린다.
+
+## 설치
+
+```bash
+claude plugin marketplace add kyxxgsoo/claude-backlog-tools
+claude plugin install orca-pipeline@kyxxgsoo-tools
+claude plugin install git-flow@kyxxgsoo-git-flow   # 출시 단계의 git 담당
+```
+
+전제: Orca 앱과 CLI(`orca`), `codex` CLI(로그인), Orca 터미널 안에서 연
+Claude Code 세션. 손으로 복사해 둔 `~/.claude/skills/orca-pipeline/`이 있으면 지운다.
+
+## 프로젝트마다 한 번
+
+스킬 폴더의 `PROJECT.template.md`를 프로젝트에 복사해 채운다(예:
+`.claude/orca-pipeline.md`). 게이트·git·**브랜치 전략**(trunk `main` / git-flow
+`develop`)·**머지 주체**(서브에이전트 / 사람)·배포·금지 구역이 비어 있으면 출발하지
+않는다. 그다음 세션에 이렇게 말한다:
+
+> orca-pipeline 스킬로 <항목>을 진행해. 프로젝트 값은 .claude/orca-pipeline.md.
+
+## 구성
+
+| 파일 | 내용 |
+|------|------|
+| `SKILL.md` | 구조, 역할 표, 단계별 명령, 메시지 루프, 결정 블록, 운영 교훈 |
+| `TEMPLATES.md` | 지시서 원형 — 계획 · 교차 검증 · 계획 수정 · 관문 · 구현 · 차이 리뷰 · 구현 수정 · 출시(§8 서브에이전트 머지 / §8b 사람 머지) |
+| `PROJECT.template.md` | 프로젝트마다 채울 값 |
+| `scripts/` | `classify.py` · `drain.sh` · `drain-loop.sh` · `waitreal.sh` · `showcheck.py` — 하트비트가 받은편지함을 막지 않게 하는 메시지 루프 보조. 경로와 런 id는 환경 변수(`ORCA_PIPE_STATE`·`ORCA_PIPE_RUN`)로 받는다 |
+
