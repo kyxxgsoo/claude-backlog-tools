@@ -136,7 +136,7 @@ orca orchestration gate-resolve --id $GATE --resolution "승인 — <누가>. �
 ```
 
 - 관문은 구현 Task에 건다. 해결 전에는 그 Task를 시작하지 못한다.
-- 사람이 자리에 없고 위임 규칙이 있으면(`PROJECT.md` §위임) 조율자가 해결한다. 해결문에는 「위임 결정」과 근거를 적는다.
+- 사람이 자리에 없고(§4.10) 위임 규칙이 있으면(`PROJECT.md` §위임) 조율자가 해결한다. 해결문에는 「위임 결정」과 근거를 적는다.
 - 위임 범위 밖의 결정은 해결하지 않고 멈춘다. 예: 되돌릴 수 없는 외부 행동, 계정·권한, 비용.
 
 ### 4.5 구현 (Claude, 새 최상위 worktree)
@@ -207,6 +207,19 @@ orca orchestration worker-release --dispatch <그 터미널의 마지막 dispatc
 orca orchestration worker-list --run <run> --terminal-state reclaimable --json     # 0건이어야 끝
 orca worktree rm --worktree path:<구현 worktree> --json    # 로컬 브랜치도 지운다 — 머지·푸시 확인 뒤에만(머지 주체=사람이면 사람의 머지 완료 확인 뒤)
 ```
+
+### 4.10 진행 방식 — 사람이 있을 때와 없을 때 (`PROJECT.md` §진행 방식)
+
+- **사람 상주**(기본): 관문(④)과 머지 주체=사람의 머지 대기(⑧)에서 멈춰 사람을 기다린다. 그 밖의 막힘도 보고하고 물어도 된다.
+- **자리 비움**: 사람이 「나는 자리에 없다」고 했거나 §진행 방식이 그렇게 정했을 때.
+  - 사람에게 묻는 길은 **관문 하나뿐**이다. 관문이 아닌 일로는 멈추지 않는다. 작업자 사이의 이견, 게이트 실패의 원인 판정, 판 수 초과 지적은 조율자가 결정 블록으로 닫고 계속 간다.
+  - 관문은 `PROJECT.md` §위임 범위 안이면 조율자가 해결하고, 범위 밖이면 관문을 열어 둔 채 **그 항목만** 멈춘다. 독립된 다른 항목은 계속 진행한다.
+  - 사람이 돌아오면 보고 형식에 맞춰 그사이 내린 결정과 열린 관문을 먼저 보고한다.
+- **사용량 한도**: 조율자나 작업자가 사용량 한도에 걸리면 갱신을 기다렸다가 이어 간다.
+  - 한도는 실패가 아니다. 작업자 Dispatch를 멈추거나 버리거나 재시도하지 않는다. 하트비트가 끊겨 liveness가 `unverifiable`이 되는 것은 「확인 불가」일 뿐이다(§5).
+  - 이어 갈 근거는 파일이다: `$STATE/handles.txt`, 지시서, 계획서 백업, 받은 out.json. 조율자 세션이 바뀌거나 압축돼도 이 파일들로 다시 선다.
+  - 재개 순서: `orca status --json` → `worker-list --run <run> --json`으로 각 작업자 상태 확인 → 밀린 배달을 §5 순서로 처리(검증 → 다음 주인 → ack) → `waitreal.sh`·`drain-loop.sh`가 꺼졌으면 다시 띄운다.
+  - 조율자가 스스로 깨어날 수단이 있으면(예: Claude Code `/loop`, 예약 실행) 자리 비움 모드에서 켜 둔다. 없으면 사람이 돌아와 「이어서」라고 할 때 위 순서로 재개한다.
 
 ## 5. 메시지 루프 — 조율자가 기다리는 법
 
@@ -280,7 +293,7 @@ orca worktree rm --worktree path:<구현 worktree> --json    # 로컬 브랜치�
 ## 9. 새 프로젝트로 옮기는 순서
 
 1. 플러그인을 설치한다(기기마다 한 번): `/plugin marketplace add kyxxgsoo/claude-backlog-tools` → `/plugin install orca-pipeline@kyxxgsoo-tools`. git 담당으로 `git-flow@kyxxgsoo-git-flow`도 설치한다. 손으로 복사한 `~/.claude/skills/orca-pipeline/`이 있으면 지운다(같은 이름의 스킬이 둘 뜬다).
-2. `PROJECT.template.md`를 프로젝트에 복사해 채운다. 예: `.claude/orca-pipeline.md`. 게이트·git·브랜치 전략·머지 주체·배포·금지 구역이 비어 있으면 출발하지 않는다.
+2. `PROJECT.template.md`를 프로젝트에 복사해 채운다. 예: `.claude/orca-pipeline.md`. 게이트·git·브랜치 전략·머지 주체·진행 방식·배포·금지 구역이 비어 있으면 출발하지 않는다.
 3. 새 세션(Orca 터미널 안의 Claude Code)에 지시한다: 「orca-pipeline 스킬로 <항목>을 진행해. 프로젝트 값은 <경로>.」
 4. 첫 실행 점검
    - `orca status --json`과 `orca skills get orchestration`을 돌린다.
