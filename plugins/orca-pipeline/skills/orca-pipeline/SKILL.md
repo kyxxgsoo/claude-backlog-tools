@@ -9,6 +9,7 @@ description: Orca 조율자 파이프라인 — 백로그 항목 하나를 계�
 
 - **Orca CLI의 문법과 의미는 이 문서가 정본이 아니다.** 정본은 `orca skills get orchestration`(실행 파일과 버전이 맞는 안내서)이다. 둘이 다르면 Orca 안내서를 따른다. 이 문서는 그 위에 얹은 작업 순서·역할·지시서 형식·운영 요령이다.
 - **이 문서의 `<기준>`은 `PROJECT.md` §브랜치 전략의 기준 브랜치다.** trunk 프로젝트는 `main`, git-flow 프로젝트는 `develop`이다. 예시 명령의 `origin/<기준>`을 그 값으로 바꿔 쓴다.
+- **모델·effort는 `PROJECT.md` §모델을 따른다.** 작업자를 새로 띄울 때마다 역할과 난이도에 맞는 `--model`·`--effort`를 붙인다(§4.11). 금지 모델은 어떤 경우에도 쓰지 않는다.
 - **프로젝트마다 다른 값은 `PROJECT.md`에 둔다.** `PROJECT.template.md`를 복사해 채운다. 담는 값: 게이트 명령, 버전·결정 기록 규칙, git 규칙, 배포, 금지 구역, 서명 줄. 이 문서 본문은 특정 프로젝트를 모른다.
 - 지시서 원형은 `TEMPLATES.md`에 있다. 보조 스크립트는 `scripts/`에 있다.
 - **경로 기준.** 이 스킬이 시작될 때 첫머리에 `Base directory for this skill: <경로>`가 주입된다. 이 문서의 `<키트>`는 그 **절대 경로**다. `TEMPLATES.md`·`PROJECT.template.md`·`scripts/`는 모두 그 아래에 있다(플러그인 캐시 안). 사용자 저장소는 지금 있는 곳(cwd)이고, 프로젝트 값 파일(`PROJECT.md`)은 프로젝트 쪽에 있다.
@@ -21,7 +22,7 @@ description: Orca 조율자 파이프라인 — 백로그 항목 하나를 계�
  ├─① 계획        Codex   worktree=current(main 체크아웃)   산출: 계획서 파일 1개
  ├─② 교차 검증   Claude  worktree=current  읽기 전용·지적만      ┐ 최대 3판
  │    └ 조율자 결정 블록 → ③ 계획 수정(같은 Codex 터미널 재사용) ┘ 3판 뒤엔 조율자가 직접 확인
- ├─④ 승인 관문   task-create(구현 Task) → gate-create → gate-resolve
+ ├─④ 승인 관문   task-create(구현 Task) → gate-create → gate-resolve   (난이도 확정 → 구현·리뷰 모델 결정)
  ├─⑤ 구현        Claude  worktree=new-top-level(origin/<기준> 기준)
  │                결정 기록 → 먼저 실패하는 테스트 → 구현 → 게이트 → 커밋(푸시 안 함)
  ├─⑥ 차이 리뷰   Codex   worktree=path:<구현 worktree>  읽기 전용      ┐ 최대 2판
@@ -49,12 +50,14 @@ description: Orca 조율자 파이프라인 — 백로그 항목 하나를 계�
 
 | 역할 | 에이전트 | 작업 공간 | 쓸 수 있는 것 | 끝 신호 |
 |---|---|---|---|---|
-| 조율자 | 이 세션 | main 체크아웃 | 지시서·결정 블록, 관문 해결, 배포 | — |
+| 조율자 | 이 세션(모델은 사용자가 `/model`로 고른 값 — 키트가 바꾸지 않는다) | main 체크아웃 | 지시서·결정 블록, 관문 해결, 배포, 난이도 판정 | — |
 | 기획 | codex | `current` | 계획서 1개 | `worker_done --report-path <계획서>` |
 | 교차 검증 | claude | `current` | 없음(읽기 전용) | `worker_done` 본문 = 지적 목록 또는 「지적 없음」 |
 | 구현 | claude | `new-top-level` | 그 worktree 전부. git은 서브에이전트로만, 푸시 금지 | `worker_done` 본문 = 커밋 해시·게이트 결과 등 |
 | 차이 리뷰 | codex | `path:<구현 wt>` | 없음(git은 diff/show/log만) | `worker_done` 본문 = 지적 목록 또는 「지적 없음」 |
 | 출시 | 조율자의 git 서브에이전트(Claude Code Agent) | main 체크아웃 + 구현 wt | 브랜치 푸시, PR. 머지·태그·릴리스는 `PROJECT.md` §머지 주체가 「서브에이전트」일 때만 | 서브에이전트 보고 |
+
+- 각 작업자의 모델·effort는 `PROJECT.md` §모델의 「역할 × 난이도」 칸이다. 비어 있으면 그 에이전트의 전역 기본값을 따른다. 출시 서브에이전트의 모델도 같은 표에서 정한다.
 
 ## 4. 단계별 절차
 
@@ -70,6 +73,7 @@ export ORCA_PIPE_STATE=<상태 폴더> ORCA_PIPE_RUN=<run_id>
 <키트>/scripts/drain-loop.sh                       # 백그라운드 상주(§5)
 ```
 
+- 항목마다 **예비 난이도**(낮음/보통/높음)를 `PROJECT.md` §모델의 난이도 기준으로 정해 `$STATE/handles.txt`에 적는다. 기획·교차 검증 작업자는 이 예비 난이도로 띄운다. 구현·리뷰 난이도는 ④에서 확정한다(§4.11).
 - 런 하나에 여러 항목을 이어 담아도 된다. 항목 구분은 핸들 기록이 한다.
 - `$STATE/handles.txt`에 일마다 한 줄을 남긴다. 형식: `<slug>-<단계>\tdispatch=…\ttask=…\tterm=…`. 상태가 바뀌면 `retained`·`done+released`를 덧붙인다.
 - 계획 단계는 여러 항목을 병렬로 돌려도 된다(계획서 파일이 다르면). 구현은 기계 부하와 CI를 보고 한두 개만 돌린다.
@@ -78,7 +82,7 @@ export ORCA_PIPE_STATE=<상태 폴더> ORCA_PIPE_RUN=<run_id>
 
 ```sh
 orca orchestration worker-start --spec "$(cat $STATE/spec-plan-<slug>.md)" --task-title "<slug> 계획" \
-  --worktree current --agent codex --timeout-ms 180000 --json > $STATE/plan-<slug>-start.json
+  --worktree current --agent codex [--model <§모델 기획> --effort <…>] --timeout-ms 180000 --json > $STATE/plan-<slug>-start.json
 ```
 
 - 계획서 절: 목표 / 지금 상태(모든 주장에 파일:줄) / 선택지와 권고 / 바뀌는 파일 / 용어 변경 / 결정 기록 초안(임시 번호) / 버전 단계 / TDD 표(「먼저 실패」와 「회귀 보호」를 나눔) / 사람 몫 / 열린 질문.
@@ -92,7 +96,7 @@ orca orchestration worker-start --spec "$(cat $STATE/spec-plan-<slug>.md)" --tas
 ```sh
 # 1판 — 새 터미널
 orca orchestration worker-start --spec "$(cat $STATE/spec-rev-<slug>-1.md)" --task-title "<slug> 교차 검증 1판" \
-  --worktree current --agent claude --timeout-ms 180000 --json
+  --worktree current --agent claude [--model <§모델 교차 검증> --effort <…>] --timeout-ms 180000 --json
 # 2·3판 — 같은 검증 터미널 재사용(--terminal과 --agent는 함께 못 쓴다)
 orca orchestration worker-start --spec "$(cat $STATE/spec-rev-<slug>-2.md)" --task-title "<slug> 교차 검증 2판" \
   --worktree current --terminal <검증 터미널> --timeout-ms 180000 --json
@@ -135,6 +139,7 @@ GATE=$(orca orchestration gate-create --task $TID \
 orca orchestration gate-resolve --id $GATE --resolution "승인 — <누가>. 근거: <결정 블록 번호 범위>" --json
 ```
 
+- 관문 질문에 **확정 난이도와 그 근거, 구현·차이 리뷰에 쓸 모델·effort**를 넣는다. 사람이 관문에서 난이도를 바꾸면(「이건 높음으로」) 그 값을 따른다.
 - 관문은 구현 Task에 건다. 해결 전에는 그 Task를 시작하지 못한다.
 - 사람이 자리에 없고(§4.10) 위임 규칙이 있으면(`PROJECT.md` §위임) 조율자가 해결한다. 해결문에는 「위임 결정」과 근거를 적는다.
 - 위임 범위 밖의 결정은 해결하지 않고 멈춘다. 예: 되돌릴 수 없는 외부 행동, 계정·권한, 비용.
@@ -143,7 +148,7 @@ orca orchestration gate-resolve --id $GATE --resolution "승인 — <누가>. �
 
 ```sh
 orca orchestration worker-start --task $TID --worktree new-top-level --name <slug> --base-branch origin/<기준> \
-  --setup run --agent claude --timeout-ms 180000 --json > $STATE/impl-<slug>-start.json
+  --setup run --agent claude [--model <§모델 구현> --effort <…>] --timeout-ms 180000 --json > $STATE/impl-<slug>-start.json
 ```
 
 - 0단계: 계획서를 worktree의 같은 상대 경로로 복사해 커밋에 넣는다. 계획서는 main 체크아웃에 추적되지 않는 파일로 있다.
@@ -162,7 +167,7 @@ orca orchestration worker-start --task $TID --worktree new-top-level --name <slu
 
 ```sh
 orca orchestration worker-start --spec "$(cat $STATE/spec-diffrev-<slug>-N.md)" --task-title "<slug> 차이 리뷰 N판" \
-  --worktree path:<구현 worktree 절대 경로> --agent codex --timeout-ms 180000 --json     # 2판은 --terminal <리뷰 터미널>
+  --worktree path:<구현 worktree 절대 경로> --agent codex [--model <§모델 차이 리뷰> --effort <…>] --timeout-ms 180000 --json     # 2판은 --terminal <리뷰 터미널>
 ```
 
 - 읽기 전용이다. `git diff origin/<기준>...HEAD`, `git show <sha>`, `git log`만 쓴다.
@@ -176,7 +181,7 @@ orca orchestration worker-start --spec "$(cat $STATE/spec-diffrev-<slug>-N.md)" 
   - worktree가 깨끗하다.
   - HEAD sha가 리뷰한 커밋과 같다.
   - `origin/<기준>`이 HEAD의 조상이다.
-- 그다음 Claude Code의 Agent 도구로 git 담당 서브에이전트를 띄운다. 지시는 `TEMPLATES.md` §8(머지 주체=서브에이전트) 또는 §8b(머지 주체=사람)를 따르고, 서브에이전트가 하는 일은 다음 차례다.
+- 그다음 Claude Code의 Agent 도구로 git 담당 서브에이전트를 띄운다. Agent 도구의 `model`은 `PROJECT.md` §모델의 「git 담당」 칸(난이도별)으로 준다. 지시는 `TEMPLATES.md` §8(머지 주체=서브에이전트) 또는 §8b(머지 주체=사람)를 따르고, 서브에이전트가 하는 일은 다음 차례다.
   1. 머지 전 게이트를 다시 돈다.
   2. 브랜치를 푸시한다(강제 푸시 금지).
   3. PR을 만든다.
@@ -220,6 +225,17 @@ orca worktree rm --worktree path:<구현 worktree> --json    # 로컬 브랜치�
   - 이어 갈 근거는 파일이다: `$STATE/handles.txt`, 지시서, 계획서 백업, 받은 out.json. 조율자 세션이 바뀌거나 압축돼도 이 파일들로 다시 선다.
   - 재개 순서: `orca status --json` → `worker-list --run <run> --json`으로 각 작업자 상태 확인 → 밀린 배달을 §5 순서로 처리(검증 → 다음 주인 → ack) → `waitreal.sh`·`drain-loop.sh`가 꺼졌으면 다시 띄운다.
   - 조율자가 스스로 깨어날 수단이 있으면(예: Claude Code `/loop`, 예약 실행) 자리 비움 모드에서 켜 둔다. 없으면 사람이 돌아와 「이어서」라고 할 때 위 순서로 재개한다.
+
+### 4.11 모델·effort 선택 (`PROJECT.md` §모델)
+
+- **난이도 판정.** 조율자가 정한다. 기준은 `PROJECT.md` §모델의 난이도 기준(바뀌는 파일 수, 운영·보안·데이터 영향, 레포 수 등)이다.
+  - 기획 전: 요청만 보고 **예비 난이도**를 정한다. 기획(①)·교차 검증(②)은 이 값으로 띄운다.
+  - 승인 관문(④): 계획서를 보고 **확정 난이도**를 정해 관문 질문에 적는다. 구현(⑤)·차이 리뷰(⑥)·출시(⑧)는 확정 값으로 띄운다.
+- **새 터미널마다 지정한다.** `worker-start --agent <에이전트> --model <id> --effort <level>`. 표의 칸이 비어 있지 않으면 **모델을 반드시 명시한다** — 전역 기본값을 따라가면 사용자가 전역을 바꿀 때(예: 비싼 모델로) 작업자가 함께 바뀐다. `--effort`만 따로 줄 수 없다(`--model` 필요).
+- **터미널 재사용(`--terminal`)에는 `--model`·`--effort`를 줄 수 없다.** 수정 판은 처음 띄운 모델을 그대로 쓴다. 판 사이에 난이도가 바뀌어 모델을 바꿔야 하면 새 터미널을 띄우고, 앞 판 결과를 지시서에 원문 그대로 붙여 맥락을 넘긴다.
+- **적용 확인.** `worker-start` 응답의 `launch.requested`와 `launch.effective`를 비교하고 `$STATE/handles.txt`에 `model=<effective>/<effort>`로 남긴다. 요청한 값과 다르면 보고한다.
+- **금지 모델.** `PROJECT.md` §모델의 금지 목록에 있는 모델은 지정하지 않는다. `launch.effective`(또는 작업자 보고)에서 금지 모델이 확인되면 그 Dispatch를 `worker-stop`으로 멈추고, 올바른 모델로 `--retry-of` 재시작한 뒤 사람에게 보고한다. 서브에이전트(Agent 도구)의 `model`에도 금지 모델을 쓰지 않는다.
+- **조율자 자신의 모델**은 사용자가 고른 세션 모델이다. 키트가 바꾸지 않는다. 금지 모델 세션이면 시작 전에 사용자에게 알린다.
 
 ## 5. 메시지 루프 — 조율자가 기다리는 법
 
@@ -289,11 +305,14 @@ orca worktree rm --worktree path:<구현 worktree> --json    # 로컬 브랜치�
 14. 실제 서비스를 읽는 측정(브라우저 등)은 읽기 전용으로 묶는다. 예: `page.route('**/api/**')`에서 GET이 아닌 요청을 모두 끊고, 클릭하지 않는다.
 15. 머지 금지 저장소(머지 주체=사람)에서 서브에이전트에게 「머지하지 말라」를 지시서에 명시하지 않으면 습관적으로 `gh pr merge`를 시도한다. 출시 지시서 [제약]에 머지·태그·릴리스 금지를 넣는다.
 16. git-flow 저장소에서 기준 브랜치에 머지되는 것이 곧 운영 배포인 경우가 있다(예: develop 푸시 → 운영 배포). 그 경우 PR 본문에 「머지 = 운영 배포」를 적어 사람이 알고 머지하게 한다.
+17. 작업자를 모델 지정 없이 띄우면 에이전트 전역 기본값(`~/.claude/settings.json`의 `model`·`modelSettings.<모델>.effortLevel`, `~/.codex/config.toml`의 `model`·`model_reasoning_effort`)을 따른다. 그 값이 바뀌면 작업자도 조용히 바뀐다. §모델 칸이 있으면 항상 명시한다.
+18. Codex는 처음 보는 폴더에서 신뢰 확인 화면을 띄워 `worker-start`가 `agent_readiness`(`agent-trust-workspace`)로 실패한다. 새 worktree(⑤에서 만든 것)에 Codex 리뷰어(⑥)를 띄우기 전에 `~/.codex/config.toml`에 `[projects."<worktree 절대 경로>"] trust_level = "trusted"`가 있는지 보고 없으면 추가한다(백업 후).
+19. 서브모듈이 있는 저장소에서 `new-top-level` worktree는 서브모듈을 초기화하지 않는다(빈 디렉터리). 구현 지시서 첫 단계에 필요한 서브모듈만 `git submodule update --init <경로>`하고 `rev-parse --show-toplevel`·`submodule status`로 확인하게 한다. 확인 전 `git -C <서브모듈>` 명령은 상위 저장소에 대고 실행될 수 있다.
 
 ## 9. 새 프로젝트로 옮기는 순서
 
 1. 플러그인을 설치한다(기기마다 한 번): `/plugin marketplace add kyxxgsoo/claude-backlog-tools` → `/plugin install orca-pipeline@kyxxgsoo-tools`. git 담당으로 `git-flow@kyxxgsoo-git-flow`도 설치한다. 손으로 복사한 `~/.claude/skills/orca-pipeline/`이 있으면 지운다(같은 이름의 스킬이 둘 뜬다).
-2. `PROJECT.template.md`를 프로젝트에 복사해 채운다. 예: `.claude/orca-pipeline.md`. 게이트·git·브랜치 전략·머지 주체·진행 방식·배포·금지 구역이 비어 있으면 출발하지 않는다.
+2. `PROJECT.template.md`를 프로젝트에 복사해 채운다. 예: `.claude/orca-pipeline.md`. 게이트·git·브랜치 전략·머지 주체·진행 방식·모델·배포·금지 구역이 비어 있으면 출발하지 않는다(§모델은 「전역 기본값 사용」도 값이다).
 3. 새 세션(Orca 터미널 안의 Claude Code)에 지시한다: 「orca-pipeline 스킬로 <항목>을 진행해. 프로젝트 값은 <경로>.」
 4. 첫 실행 점검
    - `orca status --json`과 `orca skills get orchestration`을 돌린다.

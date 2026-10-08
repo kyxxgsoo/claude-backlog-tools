@@ -1,6 +1,6 @@
 {
   "name": "orca-pipeline",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "description": "Orca 조율자 파이프라인 — 계획(Codex) → 교차 검증(Claude) → 승인 관문 → 구현(Claude, 새 worktree) → 차이 리뷰(Codex) → 출시 → 배포. 기준 브랜치(trunk/git-flow)와 머지 주체(서브에이전트/사람)는 프로젝트 값 파일로 정한다. Karvis에서 추출.",
   "author": {
     "name": "KyungsooLee"
