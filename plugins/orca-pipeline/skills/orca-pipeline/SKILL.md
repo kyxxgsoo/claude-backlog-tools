@@ -220,7 +220,7 @@ orca worktree rm --worktree path:<구현 worktree> --json    # 로컬 브랜치�
   - 사람에게 묻는 길은 **관문 하나뿐**이다. 관문이 아닌 일로는 멈추지 않는다. 작업자 사이의 이견, 게이트 실패의 원인 판정, 판 수 초과 지적은 조율자가 결정 블록으로 닫고 계속 간다.
   - 관문은 `PROJECT.md` §위임 범위 안이면 조율자가 해결하고, 범위 밖이면 관문을 열어 둔 채 **그 항목만** 멈춘다. 독립된 다른 항목은 계속 진행한다.
   - 사람이 돌아오면 보고 형식에 맞춰 그사이 내린 결정과 열린 관문을 먼저 보고한다.
-- **사용량 한도**: 조율자나 작업자가 사용량 한도에 걸리면 갱신을 기다렸다가 이어 간다.
+- **사용량 한도**: 조율자나 작업자가 사용량 한도에 걸리면 갱신을 기다렸다가 이어 간다. `PROJECT.md` §진행 방식이 「대체」이고 §모델 대체 표가 있으면 §4.12를 따른다.
   - 한도는 실패가 아니다. 작업자 Dispatch를 멈추거나 버리거나 재시도하지 않는다. 하트비트가 끊겨 liveness가 `unverifiable`이 되는 것은 「확인 불가」일 뿐이다(§5).
   - 이어 갈 근거는 파일이다: `$STATE/handles.txt`, 지시서, 계획서 백업, 받은 out.json. 조율자 세션이 바뀌거나 압축돼도 이 파일들로 다시 선다.
   - 재개 순서: `orca status --json` → `worker-list --run <run> --json`으로 각 작업자 상태 확인 → 밀린 배달을 §5 순서로 처리(검증 → 다음 주인 → ack) → `waitreal.sh`·`drain-loop.sh`가 꺼졌으면 다시 띄운다.
@@ -236,6 +236,21 @@ orca worktree rm --worktree path:<구현 worktree> --json    # 로컬 브랜치�
 - **적용 확인.** `worker-start` 응답의 `launch.requested`와 `launch.effective`를 비교하고 `$STATE/handles.txt`에 `model=<effective>/<effort>`로 남긴다. 요청한 값과 다르면 보고한다.
 - **금지 모델.** `PROJECT.md` §모델의 금지 목록에 있는 모델은 지정하지 않는다. `launch.effective`(또는 작업자 보고)에서 금지 모델이 확인되면 그 Dispatch를 `worker-stop`으로 멈추고, 올바른 모델로 `--retry-of` 재시작한 뒤 사람에게 보고한다. 서브에이전트(Agent 도구)의 `model`에도 금지 모델을 쓰지 않는다.
 - **조율자 자신의 모델**은 사용자가 고른 세션 모델이다. 키트가 바꾸지 않는다. 금지 모델 세션이면 시작 전에 사용자에게 알린다.
+
+### 4.12 모델 대체 — 한 공급자 한도 소진 시 (`PROJECT.md` §모델 대체)
+
+Claude·Codex 중 한쪽 한도가 다 되면 남은 쪽이 모든 역할을 맡는다. §모델 대체 표가 비어 있으면 대체하지 않고 §4.10대로 기다린다.
+
+- **근거가 있을 때만 바꾼다.** 근거: 작업자 화면·보고의 사용량 한도 문구, 또는 새 작업자 기동 실패 receipt(`failedStage`)의 한도 사유. 하트비트 끊김·liveness `unverifiable`·느린 응답은 근거가 아니다(§5).
+- **기록.** 바꾸기 전에 결정 블록에 「모델 대체(<날짜>, <공급자> 한도, 근거: <한 줄>)」를 남긴다.
+- **진행 중인 판.** 한도로 멈춘 것이 확인된 Dispatch만 `worker-stop` → `worker-start --retry-of <dispatch> --agent <남은 쪽> --model <표> [--effort <표>]`. 확인 안 된 작업자는 그대로 둔다.
+- **새 터미널로만 바꾼다.** `--terminal` 재사용으로는 모델을 못 바꾼다(§4.11). 앞 판 결과·결정 블록·지시서를 **원문 그대로** 새 지시서에 붙인다.
+- **쓰는 쪽과 보는 쪽을 다른 모델로.** 같은 공급자 안에서도 ①·⑤(쓰기)와 ②·⑥(보기)가 같은 모델이 되지 않게 표를 따른다.
+- **Codex 만 남으면 ⑧ git 담당은 조율자가 직접** 한다(Claude Code 플러그인 서브에이전트를 못 쓴다). 같은 규칙: 이슈·브랜치·커밋 형식·서명 줄, 기준·main 직접 푸시·강제 푸시 금지, 머지 주체 준수.
+- **적용 확인.** `launch.effective`가 표와 같은지 보고 `handles.txt`에 `model=<effective>/<effort>(대체)`로 남긴다.
+- **복귀.** 한도가 풀리면 다음 **새** 작업자부터 §모델 표로 돌아간다. 진행 중인 판은 대체 모델로 끝낸다.
+
+**조율자 자신이 한도에 걸렸을 때.** 작업자는 계속 돌지만 결정·ack가 멈춘다. 사람이 다른 공급자(또는 한도가 풀린) 세션을 열고 `TEMPLATES.md` §9 인계 프롬프트를 붙여 넣는다. 새 조율자는 §4.10 재개 순서를 따르고, 앞 조율자의 루프가 살아 있으면 `touch $STATE/drain.stop`으로 먼저 끈다. 인계 프롬프트는 항목을 시작할 때 `$STATE/handoff.md`로 미리 채워 두고 판마다 갱신한다(조율자가 멈춘 뒤에는 쓸 수 없다).
 
 ## 5. 메시지 루프 — 조율자가 기다리는 법
 
@@ -308,6 +323,7 @@ orca worktree rm --worktree path:<구현 worktree> --json    # 로컬 브랜치�
 17. 작업자를 모델 지정 없이 띄우면 에이전트 전역 기본값(`~/.claude/settings.json`의 `model`·`modelSettings.<모델>.effortLevel`, `~/.codex/config.toml`의 `model`·`model_reasoning_effort`)을 따른다. 그 값이 바뀌면 작업자도 조용히 바뀐다. §모델 칸이 있으면 항상 명시한다.
 18. Codex는 처음 보는 폴더에서 신뢰 확인 화면을 띄워 `worker-start`가 `agent_readiness`(`agent-trust-workspace`)로 실패한다. 새 worktree(⑤에서 만든 것)에 Codex 리뷰어(⑥)를 띄우기 전에 `~/.codex/config.toml`에 `[projects."<worktree 절대 경로>"] trust_level = "trusted"`가 있는지 보고 없으면 추가한다(백업 후).
 19. 서브모듈이 있는 저장소에서 `new-top-level` worktree는 서브모듈을 초기화하지 않는다(빈 디렉터리). 구현 지시서 첫 단계에 필요한 서브모듈만 `git submodule update --init <경로>`하고 `rev-parse --show-toplevel`·`submodule status`로 확인하게 한다. 확인 전 `git -C <서브모듈>` 명령은 상위 저장소에 대고 실행될 수 있다.
+20. `worker-start --spec <파일 이름>`은 파일을 읽지 않고 **이름 문자열만** 작업자에게 보낸다. 작업자는 그 파일을 찾지 못해 되묻거나(실제로 있었다), 이름만 보고 짐작해 일한다. 항상 `--spec "$(cat <파일>)"`로 본문을 넘긴다. 잘못 보냈으면 `reply`로 본문 전체를 보내고, 그 판의 결과는 다음 판에서 전체를 다시 보게 한다.
 
 ## 9. 새 프로젝트로 옮기는 순서
 
