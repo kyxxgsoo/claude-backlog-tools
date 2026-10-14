@@ -1,0 +1,15 @@
+• Explored
+  └ Read deploy.sh, rollback.sh, docker-compose.prod.yml
+    + Show details
+• 결정 블록의 순서와 주요 경계를 따르고 있습니다. 지금은 부분 실패 복구를 읽고 있습니다.
+• Ran orca orchestration send --from term_0000 --type heartbeat --subject alive --task-…
+  └ Sent msg_000000000000
+    + Show details
+■ You’ve hit your usage limit. Upgrade to Pro (https://chatgpt.com/explore/pro), visit https://chatgpt.com/codex/
+settings/usage to purchase more credits or try again at 3:10 PM.
+  Approaching rate limits
+  Switch to gpt-6-luna for lower credit usage?
+› 1. Switch to gpt-6-luna                   Fast and affordable model for easier tasks.
+  2. Keep current model
+  3. Keep current model (never show again)  Hide future rate limit reminders about switching models
+  enter select · esc back

@@ -1,0 +1,10 @@
+  ⎿  Tip: Use /btw to ask a quick side question without interrupting Claude's current work
+                                                                Update available! Run: brew upgrade claude-code@latest
+────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+❯
+────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+  branch:feature/example (wt:example) | ?2
+  [OMC#5.5.0L] | Model: Sonnet 5.5 | [Claude#2.1.293] -> 2.1.296 claude update
+  5h:[##------]20%(4h32m) wk:[##------]24%(5d10h) fable:[--------]0%(5d10h) | thinking | session:4m | ctx:[###-------…
+  ██░░░░░░░░ 25% | $1.78 | ⏱️  4m 10s
+  ⏵⏵ bypass permissions on (shift+tab to cycle) · ← for agents

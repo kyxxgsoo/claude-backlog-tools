@@ -1,0 +1,7 @@
+⏺ Read(docs/ADR.md)
+  ⎿  Read 120 lines
+  ⎿  You've hit your limit · resets 11pm (Asia/Seoul)
+     /upgrade or /extra-usage to finish what you're working on.
+╭──────────────────────────────────────────────────────╮
+│ >                                                    │
+╰──────────────────────────────────────────────────────╯

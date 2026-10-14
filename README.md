@@ -138,5 +138,5 @@ Claude Code 세션. 손으로 복사해 둔 `~/.claude/skills/orca-pipeline/`이
 | `SKILL.md` | 구조, 역할 표, 단계별 명령, 메시지 루프, 결정 블록, 운영 교훈 |
 | `TEMPLATES.md` | 지시서 원형 — 계획 · 교차 검증 · 계획 수정 · 관문 · 구현 · 차이 리뷰 · 구현 수정 · 출시(§8 서브에이전트 머지 / §8b 사람 머지) |
 | `PROJECT.template.md` | 프로젝트마다 채울 값 |
-| `scripts/` | `classify.py` · `drain.sh` · `drain-loop.sh` · `waitreal.sh` · `showcheck.py` — 하트비트가 받은편지함을 막지 않게 하는 메시지 루프 보조. 경로와 런 id는 환경 변수(`ORCA_PIPE_STATE`·`ORCA_PIPE_RUN`)로 받는다 |
+| `scripts/` | `classify.py` · `drain.sh` · `drain-loop.sh` · `waitreal.sh` · `showcheck.py` — 하트비트가 받은편지함을 막지 않게 하는 메시지 루프 보조. `limitwatch.sh` · `limitmatch.py` — 작업자 화면의 사용량 한도 문구를 잡아 조율자를 깨운다(모델 대체, `scripts/test/limitwatch-test.sh`로 확인). 경로와 런 id는 환경 변수(`ORCA_PIPE_STATE`·`ORCA_PIPE_RUN`)로 받는다 |
 

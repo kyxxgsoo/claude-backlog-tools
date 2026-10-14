@@ -1,0 +1,9 @@
+• Explored
+  └ Read deploy.sh, rollback.sh, docker-compose.prod.yml
+    + Show details
+• Ran orca orchestration check --terminal term_0000 --json
+  └     "runtimeId": "00000000"
+      }
+    + 20 lines (ctrl+t to expand)
+• Working (2m 10s • esc to interrupt)
+› Summarize recent commits
