@@ -1,0 +1,59 @@
+{
+ "id": "fixture",
+ "ok": true,
+ "result": {
+  "workers": [
+   {
+    "dispatchId": "ctx_codex1",
+    "taskId": "task_ctx_codex1",
+    "runId": "run_fixture",
+    "agentTerminalHandle": "term_ctx_codex1",
+    "terminalState": "active",
+    "projection": {
+     "dispatchId": "ctx_codex1",
+     "provider": {
+      "id": "codex",
+      "model": null
+     },
+     "outcome": "in_progress"
+    }
+   },
+   {
+    "dispatchId": "ctx_claude1",
+    "taskId": "task_ctx_claude1",
+    "runId": "run_fixture",
+    "agentTerminalHandle": "term_ctx_claude1",
+    "terminalState": "active",
+    "projection": {
+     "dispatchId": "ctx_claude1",
+     "provider": {
+      "id": "claude",
+      "model": null
+     },
+     "outcome": "in_progress"
+    }
+   },
+   {
+    "dispatchId": "ctx_done",
+    "taskId": "task_ctx_done",
+    "runId": "run_fixture",
+    "agentTerminalHandle": "term_ctx_done",
+    "terminalState": "retained",
+    "projection": {
+     "dispatchId": "ctx_done",
+     "provider": {
+      "id": "codex",
+      "model": null
+     },
+     "outcome": "succeeded"
+    }
+   }
+  ],
+  "page": {
+   "hasMore": false
+  },
+  "scope": {
+   "source": "flag"
+  }
+ }
+}

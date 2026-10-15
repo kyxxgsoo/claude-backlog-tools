@@ -70,7 +70,7 @@ orca status --json
 orca skills get orchestration                      # 버전 맞는 안내서를 먼저 읽는다
 orca orchestration run-create --objective "<목표>" --json   # 이미 있으면 run-use --id <run>
 export ORCA_PIPE_STATE=<상태 폴더> ORCA_PIPE_RUN=<run_id>
-<키트>/scripts/drain-loop.sh                       # 백그라운드 상주(§5)
+<키트>/scripts/drain-loop.sh                       # 백그라운드 상주(§5). 매 주기 limitwatch로 작업자 사용량 한도도 본다(§4.12)
 ```
 
 - 항목마다 **예비 난이도**(낮음/보통/높음)를 `PROJECT.md` §모델의 난이도 기준으로 정해 `$STATE/handles.txt`에 적는다. 기획·교차 검증 작업자는 이 예비 난이도로 띄운다. 구현·리뷰 난이도는 ④에서 확정한다(§4.11).
@@ -221,9 +221,10 @@ orca worktree rm --worktree path:<구현 worktree> --json    # 로컬 브랜치�
   - 관문은 `PROJECT.md` §위임 범위 안이면 조율자가 해결하고, 범위 밖이면 관문을 열어 둔 채 **그 항목만** 멈춘다. 독립된 다른 항목은 계속 진행한다.
   - 사람이 돌아오면 보고 형식에 맞춰 그사이 내린 결정과 열린 관문을 먼저 보고한다.
 - **사용량 한도**: 조율자나 작업자가 사용량 한도에 걸리면 갱신을 기다렸다가 이어 간다. `PROJECT.md` §진행 방식이 「대체」이고 §모델 대체 표가 있으면 §4.12를 따른다.
-  - 한도는 실패가 아니다. 작업자 Dispatch를 멈추거나 버리거나 재시도하지 않는다. 하트비트가 끊겨 liveness가 `unverifiable`이 되는 것은 「확인 불가」일 뿐이다(§5).
+  - 작업자의 한도는 `limitwatch.sh`가 화면에서 잡아 `$STATE/limit-<공급자>.json`을 남기고, `waitreal.sh`가 `LIMIT`으로 끝나 조율자를 깨운다(§4.12 자동 감지). 사람이 알아채기를 기다리지 않는다.
+  - 「기다림」일 때 한도는 실패가 아니다. 작업자 Dispatch를 멈추거나 버리거나 재시도하지 않는다. 하트비트가 끊겨 liveness가 `unverifiable`이 되는 것은 「확인 불가」일 뿐이다(§5).
   - 이어 갈 근거는 파일이다: `$STATE/handles.txt`, 지시서, 계획서 백업, 받은 out.json. 조율자 세션이 바뀌거나 압축돼도 이 파일들로 다시 선다.
-  - 재개 순서: `orca status --json` → `worker-list --run <run> --json`으로 각 작업자 상태 확인 → 밀린 배달을 §5 순서로 처리(검증 → 다음 주인 → ack) → `waitreal.sh`·`drain-loop.sh`가 꺼졌으면 다시 띄운다.
+  - 재개 순서: `orca status --json` → `worker-list --run <run> --json`으로 각 작업자 상태 확인 → `ls $STATE/limit-*.json`으로 남은 한도 플래그 확인(`.cleared-`는 지난 것, §4.12) → 밀린 배달을 §5 순서로 처리(검증 → 다음 주인 → ack) → `waitreal.sh`·`drain-loop.sh`가 꺼졌으면 다시 띄운다.
   - 조율자가 스스로 깨어날 수단이 있으면(예: Claude Code `/loop`, 예약 실행) 자리 비움 모드에서 켜 둔다. 없으면 사람이 돌아와 「이어서」라고 할 때 위 순서로 재개한다.
 
 ### 4.11 모델·effort 선택 (`PROJECT.md` §모델)
@@ -241,7 +242,28 @@ orca worktree rm --worktree path:<구현 worktree> --json    # 로컬 브랜치�
 
 Claude·Codex 중 한쪽 한도가 다 되면 남은 쪽이 모든 역할을 맡는다. §모델 대체 표가 비어 있으면 대체하지 않고 §4.10대로 기다린다.
 
-- **근거가 있을 때만 바꾼다.** 근거: 작업자 화면·보고의 사용량 한도 문구, 또는 새 작업자 기동 실패 receipt(`failedStage`)의 한도 사유. 하트비트 끊김·liveness `unverifiable`·느린 응답은 근거가 아니다(§5).
+- **근거가 있을 때만 바꾼다.** 근거는 셋이다.
+  - `$STATE/limit-<공급자>.json` — `limitwatch.sh`가 작업자 화면의 한도 문구를 보고 남긴 플래그(아래 자동 감지).
+  - 조율자가 직접 본 작업자 화면·보고의 사용량 한도 문구.
+  - 새 작업자 기동 실패 receipt(`failedStage`)의 한도 사유(아래 기동 실패).
+  - 하트비트 끊김·liveness `unverifiable`·느린 응답은 근거가 아니다(§5). limitwatch도 이것으로는 플래그를 쓰지 않는다.
+- **자동 감지.** `drain-loop.sh`가 45초마다 도는 `drain.sh` 끝에서 `limitwatch.sh`를 부른다.
+  - 런의 진행 중(`projection.outcome=in_progress`) 작업자마다 `worker-read --dispatch <id> --source terminal --limit 40 --json`으로 렌더된 화면 꼬리(`result.terminal.tail`)를 읽는다.
+  - 그 작업자 공급자(`projection.provider.id`)의 한도 문구가 화면 맨 아래 25줄의 **줄 머리**에 있으면 플래그를 쓴다. 문서·diff 안에 인용된 문구는 줄 머리가 아니라서 잡지 않는다.
+  - 플래그 필드: `provider`·`dispatch`·`terminal`·`task`·`run`·`model`·`line`(맞은 줄, 접힌 줄은 이음)·`resetHint`(「try again at 3:10 PM」의 시각 원문)·`detectedAt`·`source`·`earlier`(같은 공급자에서 앞서 잡힌 dispatch).
+  - 같은 dispatch는 두 번 쓰지 않는다(`.cleared-` 파일에 있어도). Orca에는 읽기만 한다. 멈추기·해제·재시도는 조율자가 한다.
+  - `waitreal.sh`는 시작 뒤에 쓰인 플래그를 보면 `LIMIT <파일>`을 찍고 끝난다(§5). 그래서 `worker_done`을 못 보내고 멈춘 작업자도 조율자를 깨운다.
+  - 문구 목록은 `<키트>/scripts/limitmatch.py`의 `PATTERNS` 한 곳에 있다. 새 문구를 보면 거기에 더하고 `scripts/test/limitwatch-fixtures/`에 표본 화면을, `scripts/test/limitwatch-test.sh`에 줄을 더한다.
+- **깨어나면 바로 한다.** §진행 방식이 「대체」면 사람에게 묻지 않는다. 정책이 이미 정했다. 「기다림」이면 플래그는 기록일 뿐이다. 사람에게 보고하고 §4.10대로 기다린다.
+  1. 플래그를 읽는다. 그 dispatch를 `worker-read --dispatch <dispatch> --source terminal --limit 40 --json`으로 한 번 더 읽어 `line`이 화면 맨 아래에 그대로 있는지 본다. 없으면 잘못 잡은 것이다. 플래그를 `limit-<공급자>.cleared-<YYYYMMDDTHHMM>.json`으로 옮기고 계속 기다린다.
+  2. 아래 **기록**대로 결정 블록을 남긴다. 근거 한 줄은 `limit-<공급자>.json — <line>`이다.
+  3. 아래 **진행 중인 판**대로 그 dispatch를 바꾼다. 한도 화면은 그 에이전트 턴이 `worker_done` 없이 끝났다는 근거다. 같은 공급자의 다른 작업자는 플래그가 없으면 그대로 둔다(한도에 걸리면 다음 주기에 잡힌다).
+  4. 플래그가 있는 동안 그 공급자로 띄울 **새** 작업자는 모두 대체 표로 띄운다.
+  5. `waitreal.sh`를 다시 띄운다.
+- **기동 실패.** `worker-start`가 실패하면 receipt를 파일로 받아 `<키트>/scripts/limitwatch.sh --flag-receipt <receipt> --agent <공급자>`를 돈다.
+  - exit 0: 한도 사유다. 플래그가 생겼다(`source: "worker-start receipt"`). 위 2~5를 따른다. 진행 중이던 dispatch가 없으면 새 작업자만 대체 표로 띄운다.
+  - exit 1: 한도 사유가 아니다. §8 교훈 1대로 한다.
+  - receipt에 문구가 없어도 조율자가 한도를 확인했으면 같은 필드로 플래그를 직접 쓴다.
 - **기록.** 바꾸기 전에 결정 블록에 「모델 대체(<날짜>, <공급자> 한도, 근거: <한 줄>)」를 남긴다.
 - **진행 중인 판.** 한도로 멈춘 것이 확인된 Dispatch만 `worker-stop` → `worker-start --retry-of <dispatch> --agent <남은 쪽> --model <표> [--effort <표>]`. 확인 안 된 작업자는 그대로 둔다.
 - **새 터미널로만 바꾼다.** `--terminal` 재사용으로는 모델을 못 바꾼다(§4.11). 앞 판 결과·결정 블록·지시서를 **원문 그대로** 새 지시서에 붙인다.
@@ -249,6 +271,9 @@ Claude·Codex 중 한쪽 한도가 다 되면 남은 쪽이 모든 역할을 맡
 - **Codex 만 남으면 ⑧ git 담당은 조율자가 직접** 한다(Claude Code 플러그인 서브에이전트를 못 쓴다). 같은 규칙: 이슈·브랜치·커밋 형식·서명 줄, 기준·main 직접 푸시·강제 푸시 금지, 머지 주체 준수.
 - **적용 확인.** `launch.effective`가 표와 같은지 보고 `handles.txt`에 `model=<effective>/<effort>(대체)`로 남긴다.
 - **복귀.** 한도가 풀리면 다음 **새** 작업자부터 §모델 표로 돌아간다. 진행 중인 판은 대체 모델로 끝낸다.
+  - 풀렸다는 근거: `resetHint` 시각이 지났다. 또는 그 공급자의 새 작업자가 정상 기동해 진행한다.
+  - 근거가 서면 플래그를 `limit-<공급자>.cleared-<YYYYMMDDTHHMM>.json`으로 옮긴다. 지우지 않는다. 기록이고, limitwatch가 같은 dispatch를 다시 잡지 않게 읽는다.
+  - 근거가 서지 않으면 플래그를 둔 채 대체 표를 계속 쓴다.
 
 **조율자 자신이 한도에 걸렸을 때.** 작업자는 계속 돌지만 결정·ack가 멈춘다. 사람이 다른 공급자(또는 한도가 풀린) 세션을 열고 `TEMPLATES.md` §9 인계 프롬프트를 붙여 넣는다. 새 조율자는 §4.10 재개 순서를 따르고, 앞 조율자의 루프가 살아 있으면 `touch $STATE/drain.stop`으로 먼저 끈다. 인계 프롬프트는 항목을 시작할 때 `$STATE/handoff.md`로 미리 채워 두고 판마다 갱신한다(조율자가 멈춘 뒤에는 쓸 수 없다).
 
@@ -260,12 +285,15 @@ Claude·Codex 중 한쪽 한도가 다 되면 남은 쪽이 모든 역할을 맡
   - `drain-loop.sh`(상주): 45초마다 맨 앞 배달을 본다.
     - 하트비트만 들었으면 ack한다.
     - 진짜 메시지가 들었으면 손대지 않는다(`STOP` 로그).
+    - 끝에 `limitwatch.sh`로 진행 중 작업자 화면의 사용량 한도 문구를 본다(읽기만, `LIMIT` 로그, §4.12). 실패해도 루프는 계속 돈다. 끄려면 `ORCA_PIPE_LIMITWATCH=0`.
     - `$STATE/drain.stop` 파일이 생기면 끝난다.
-  - `waitreal.sh <out.json>`(일 하나에 한 번): `check --wait --types worker_done,escalation,question`으로 기다린다.
+  - `waitreal.sh <out.json>`(일 하나에 한 번): `check --wait --types worker_done,escalation,question`으로 기다린다. 한 번에 60초씩(`WAITREAL_POLL_MS`) 끊어 기다리고, 사이마다 한도 플래그를 본다.
     - 하트비트 묶음은 ack하고 계속 기다린다.
-    - 진짜 메시지가 오면 파일에 남기고 끝난다. ack는 하지 않는다.
+    - 진짜 메시지가 오면 파일에 남기고 끝난다(`REAL <delivery>`). ack는 하지 않는다.
+    - 시작 뒤에 `$STATE/limit-<공급자>.json`이 쓰이면 끝난다(`LIMIT <파일>`). out.json에는 `{"type":"limit","files":[…]}`가 남는다. 배달이 아니므로 ack할 것이 없다. `REAL`과 함께 오면 두 줄을 다 찍는다.
     - 끝나면 Claude Code가 조율자를 깨운다.
     - `TIMEOUT`은 실패가 아니라 체크포인트다. 다시 띄운다.
+- `LIMIT`으로 깨어나면 §4.12 「깨어나면 바로 한다」를 따르고 waitreal을 다시 띄운다. `REAL`과 함께 찍혔으면 배달부터 아래 순서로 처리한다.
 - 진짜 메시지는 이 순서로 처리한다(Orca 안내서 「Completion accounting」).
   1. 읽는다: `python3 <키트>/scripts/showcheck.py out.json 1500`
   2. 메시지 종류에 따라 처리한다.
@@ -324,6 +352,7 @@ Claude·Codex 중 한쪽 한도가 다 되면 남은 쪽이 모든 역할을 맡
 18. Codex는 처음 보는 폴더에서 신뢰 확인 화면을 띄워 `worker-start`가 `agent_readiness`(`agent-trust-workspace`)로 실패한다. 새 worktree(⑤에서 만든 것)에 Codex 리뷰어(⑥)를 띄우기 전에 `~/.codex/config.toml`에 `[projects."<worktree 절대 경로>"] trust_level = "trusted"`가 있는지 보고 없으면 추가한다(백업 후).
 19. 서브모듈이 있는 저장소에서 `new-top-level` worktree는 서브모듈을 초기화하지 않는다(빈 디렉터리). 구현 지시서 첫 단계에 필요한 서브모듈만 `git submodule update --init <경로>`하고 `rev-parse --show-toplevel`·`submodule status`로 확인하게 한다. 확인 전 `git -C <서브모듈>` 명령은 상위 저장소에 대고 실행될 수 있다.
 20. `worker-start --spec <파일 이름>`은 파일을 읽지 않고 **이름 문자열만** 작업자에게 보낸다. 작업자는 그 파일을 찾지 못해 되묻거나(실제로 있었다), 이름만 보고 짐작해 일한다. 항상 `--spec "$(cat <파일>)"`로 본문을 넘긴다. 잘못 보냈으면 `reply`로 본문 전체를 보내고, 그 판의 결과는 다음 판에서 전체를 다시 보게 한다.
+21. Codex 작업자가 사용량 한도 화면(「You've hit your usage limit … try again at 5:07 PM」)에서 멈추면 `worker_done`을 보내지 않는다. liveness는 `live`, outcome은 `in_progress` 그대로라 `waitreal.sh`도 `worker-list`도 아무 일 없어 보인다(실제로 있었다, 사람이 알아챘다). 그래서 limitwatch가 화면을 읽는다(§4.12). 화면 문구는 하트비트·liveness와 달리 근거다.
 
 ## 9. 새 프로젝트로 옮기는 순서
 

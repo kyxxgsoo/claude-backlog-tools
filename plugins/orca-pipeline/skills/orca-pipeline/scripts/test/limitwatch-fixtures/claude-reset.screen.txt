@@ -1,0 +1,10 @@
+⏺ Bash(pnpm test --concurrency=4)
+  ⎿  Running…
+  ⎿  Claude usage limit reached. Your limit will reset at 5pm (Asia/Seoul).
+
+     • /upgrade to increase your usage limit.
+
+╭──────────────────────────────────────────────────────╮
+│ >                                                    │
+╰──────────────────────────────────────────────────────╯
+  ? for shortcuts

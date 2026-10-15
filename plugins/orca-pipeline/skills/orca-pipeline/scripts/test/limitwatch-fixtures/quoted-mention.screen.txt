@@ -1,0 +1,7 @@
+⏺ Read(plugins/orca-pipeline/skills/orca-pipeline/SKILL.md)
+  ⎿  Read 340 lines
+⏺ 근거 문구 예시는 「You've hit your usage limit」와 "Claude usage limit reached"이다. SKILL.md §4.12와 맞다.
+  - 지적 없음: 한도 문구(“5-hour limit reached ∙ resets 5pm”)는 표본으로만 쓰인다.
+╭──────────────────────────────────────────────────────╮
+│ >                                                    │
+╰──────────────────────────────────────────────────────╯

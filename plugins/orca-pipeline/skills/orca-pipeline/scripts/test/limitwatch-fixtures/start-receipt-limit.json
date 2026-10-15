@@ -1,0 +1,16 @@
+{
+ "id": "fixture",
+ "ok": false,
+ "error": {
+  "code": "worker_start_failed",
+  "message": "agent did not become ready",
+  "data": {
+   "failedStage": "agent_readiness",
+   "dispatchId": "ctx_start1",
+   "taskId": "task_start1",
+   "screenTail": [
+    "■ You’ve hit your usage limit. Upgrade to Pro (https://chatgpt.com/explore/pro) or try again at 9:30 PM."
+   ]
+  }
+ }
+}

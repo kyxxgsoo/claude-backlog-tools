@@ -1,0 +1,41 @@
+{
+ "id": "fixture",
+ "ok": true,
+ "result": {
+  "dispatchId": "ctx_claude1",
+  "source": "terminal",
+  "terminal": {
+   "handle": "term_ctx_claude1",
+   "status": "running",
+   "tail": [
+    "⏺ Bash(pnpm typecheck)",
+    "  ⎿  Done (exit 0)",
+    "⏺ 게이트 1을 통과했다. 다음은 lint다.",
+    "✻ Thinking… (esc to interrupt)",
+    "╭──────────────────────────────────────────────────────╮",
+    "│ >                                                    │",
+    "╰──────────────────────────────────────────────────────╯"
+   ],
+   "truncated": true,
+   "source": "screen"
+  },
+  "status": {
+   "worker": "ready",
+   "terminal": "running",
+   "liveness": "live"
+  },
+  "projection": {
+   "dispatchId": "ctx_claude1",
+   "taskId": "task_ctx_claude1",
+   "runId": "run_fixture",
+   "provider": {
+    "id": "claude",
+    "model": "claude-sonnet-5-5"
+   },
+   "outcome": "in_progress",
+   "liveness": {
+    "verdict": "live"
+   }
+  }
+ }
+}

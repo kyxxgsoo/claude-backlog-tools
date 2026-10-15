@@ -246,18 +246,20 @@
 [먼저 읽기]
 1. 스킬: <플러그인 경로>/skills/orca-pipeline/SKILL.md (§4.10 재개 순서, §4.12 모델 대체, §5 메시지 루프) · TEMPLATES.md
 2. 프로젝트 값: <레포>/.claude/orca-pipeline.md (§모델 · §모델 대체 · §금지 구역 · §머지 주체)
-3. 상태 폴더: <STATE 절대 경로> — handles.txt(작업자·dispatch·모델), spec-*.md(지시서), 결과 파일, 계획서 백업
+3. 상태 폴더: <STATE 절대 경로> — handles.txt(작업자·dispatch·모델), spec-*.md(지시서), 결과 파일, 계획서 백업, limit-<공급자>.json(사용량 한도 플래그)
 
 [지금 상태 — 앞 조율자가 마지막으로 쓴 것]
 - run: <run id> / 항목: <이름> (<결정 기록·버전>)
 - 단계: <예: ⑥ 차이 리뷰 2판 대기> / 열린 관문: <없음 | gate id>
 - 살아 있는 작업자: <dispatch · 역할 · 모델 · worktree>
+- 한도 플래그: <없음 | limit-<공급자>.json (resetHint) — 대체 중>
 - 사람 결정(원문): <요약 아님, 원문>
 - 다음 할 일: <한두 줄>
 
 [재개 순서]
 1. 앞 조율자 루프 끄기: touch <STATE>/drain.stop (다른 런의 루프는 건드리지 않는다)
-2. orca status --json → orca orchestration worker-list --run <run> --json
+2. orca status --json → orca orchestration worker-list --run <run> --json → ls <STATE>/limit-*.json
+   (`.cleared-`가 없는 플래그가 있으면 그 공급자는 한도 중이다 — SKILL.md §4.12대로 대체 표를 쓰고, resetHint가 지났으면 복귀를 판단한다)
 3. 밀린 배달을 SKILL.md §5 순서로 처리(검증 → 다음 주인 → ack)
 4. drain-loop.sh · waitreal.sh 다시 띄우기 (ORCA_PIPE_STATE=<STATE> ORCA_PIPE_RUN=<run>)
 5. 새 작업자는 §모델 대체 표의 <남은 공급자> 칸으로 띄운다. 이 세션이 Codex면 git 담당은 직접 한다(같은 규칙).
