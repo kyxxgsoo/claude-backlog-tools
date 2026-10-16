@@ -21,7 +21,7 @@ description: Orca 조율자 파이프라인 — 백로그 항목 하나를 계�
  │
  ├─① 계획        Codex   worktree=current(main 체크아웃)   산출: 계획서 파일 1개
  ├─② 교차 검증   Claude  worktree=current  읽기 전용·지적만      ┐ 최대 3판
- │    └ 조율자 결정 블록 → ③ 계획 수정(같은 Codex 터미널 재사용) ┘ 3판 뒤엔 조율자가 직접 확인
+ │    └ 조율자 결정 블록 → ③ 계획 수정(새 Codex 터미널, 앞 판 맥락 첨부) ┘ 3판 뒤엔 조율자가 직접 확인
  ├─④ 승인 관문   task-create(구현 Task) → gate-create → gate-resolve   (난이도 확정 → 구현·리뷰 모델 결정)
  ├─⑤ 구현        Claude  worktree=new-top-level(origin/<기준> 기준)
  │                결정 기록 → 먼저 실패하는 테스트 → 구현 → 게이트 → 커밋(푸시 안 함)
@@ -40,7 +40,8 @@ description: Orca 조율자 파이프라인 — 백로그 항목 하나를 계�
 - **판 수에 상한이 있다(검증 3판·리뷰 2판).** 끝없는 핑퐁을 막는다. 남은 지적은 조율자가 결정으로 닫는다.
 - **결정은 조율자만 내린다.** 작업자는 선택지와 지적만 낸다. 조율자의 결정은 계획서 맨 위 인용 블록으로 남는다. 그래서 구현자가 근거를 보고 되묻지 않는다.
 - **관문은 구현 Task에 건다.** 승인 전에는 구현이 시작될 수 없다. 그 순서가 런 기록에 남는다.
-- **수정 판은 같은 터미널이 받는다.** 앞 판 맥락을 가진 같은 에이전트가 고친다. 일관되고 싸다.
+- **구현 수정 판은 같은 터미널이 받는다.** 앞 판 맥락을 가진 같은 Claude 구현자가 고친다. 일관되고 싸다.
+- **Codex 작업 창은 결과를 받으면 바로 닫는다.** 기획·리뷰를 맡은 Codex 터미널은 결과를 처리하자마자 해제하고 닫는다. 열어 둔 Codex 창은 Codex 앱 대화 목록과 Orca에 쌓이고(「Report task outcome」), 다시 열리면 잘못된 입력 한 번에 사용량이 나간다. 다음 판은 새 Codex 터미널에 앞 판 결과·계획서·결정 블록을 원문으로 붙여 맥락을 넘긴다.
 - **작업 공간을 나눈다.** 구현은 새 최상위 worktree에서 한다. main 체크아웃은 계획서·배포용으로 깨끗하게 둔다.
 - **git은 한곳에서만 한다.** 푸시·머지 권한이 작업자에게 흩어지지 않는다. `--match-head-commit`이 리뷰한 커밋과 머지한 커밋이 같음을 보장한다.
 - **판정은 exit code로 한다.** 출력 문구(「N successful」 등)로 판정하지 않는다.
@@ -88,7 +89,7 @@ orca orchestration worker-start --spec "$(cat $STATE/spec-plan-<slug>.md)" --tas
 - 계획서 절: 목표 / 지금 상태(모든 주장에 파일:줄) / 선택지와 권고 / 바뀌는 파일 / 용어 변경 / 결정 기록 초안(임시 번호) / 버전 단계 / TDD 표(「먼저 실패」와 「회귀 보호」를 나눔) / 사람 몫 / 열린 질문.
 - 완료 보고를 받으면 순서대로 한다.
   1. 계획서를 백업한다: `cp <계획서> $STATE/backup-plan-<slug>.md`
-  2. 터미널을 붙잡아 둔다(수정 판에 다시 쓴다): `worker-retain --dispatch <ctx>`
+  2. Codex 터미널을 해제하고 닫는다(§5 3단계): `worker-release --dispatch <ctx>` → `orca terminal close --terminal <터미널>`
   3. 배달을 확인한다: `check --ack`
 
 ### 4.2 교차 검증 (Claude, 최대 3판)
@@ -109,12 +110,14 @@ orca orchestration worker-start --spec "$(cat $STATE/spec-rev-<slug>-2.md)" --ta
   - 이번 판에 특히 볼 결정 번호를 적는다.
 - 조율자는 지적마다 결정한다. 결정은 결정 블록으로 쓴다(§6).
 
-### 4.3 계획 수정 (같은 Codex 터미널)
+### 4.3 계획 수정 (새 Codex 터미널)
 
 ```sh
 orca orchestration worker-start --spec "$(cat $STATE/spec-fix-<slug>-N.md)" --task-title "<slug> 계획 N판 반영" \
-  --worktree current --terminal <기획 터미널> --timeout-ms 180000 --json
+  --worktree current --agent codex [--model <§모델 기획> --effort <…>] --timeout-ms 180000 --json
 ```
+
+- 앞 기획 터미널은 이미 닫혀 있다(§4.1). 새 Codex가 맥락을 모르므로 지시서 맨 앞에 「계획서 <경로>가 네가 이어서 고칠 문서다, 맨 위 결정 블록부터 읽는다」를 적는다.
 
 - 지시서에 넣을 것:
   - 검증 결과 원문
@@ -126,7 +129,7 @@ orca orchestration worker-start --spec "$(cat $STATE/spec-fix-<slug>-N.md)" --ta
   - 결정 블록과 본문이 모순되지 않는다.
   - 열린 질문이 「없음」이다.
   - 구현자가 되묻지 않고 구현할 수 있다.
-- 사용자가 중간에 요구를 더하면 「추가 결정(N+1판)」으로 같은 터미널에 한 번 더 보낸다. 이것은 검증 판 수에 세지 않는다.
+- 사용자가 중간에 요구를 더하면 「추가 결정(N+1판)」으로 새 Codex 터미널에 한 번 더 보낸다. 이것은 검증 판 수에 세지 않는다.
 
 ### 4.4 승인 관문
 
@@ -167,9 +170,10 @@ orca orchestration worker-start --task $TID --worktree new-top-level --name <slu
 
 ```sh
 orca orchestration worker-start --spec "$(cat $STATE/spec-diffrev-<slug>-N.md)" --task-title "<slug> 차이 리뷰 N판" \
-  --worktree path:<구현 worktree 절대 경로> --agent codex [--model <§모델 차이 리뷰> --effort <…>] --timeout-ms 180000 --json     # 2판은 --terminal <리뷰 터미널>
+  --worktree path:<구현 worktree 절대 경로> --agent codex [--model <§모델 차이 리뷰> --effort <…>] --timeout-ms 180000 --json     # 2판도 새 Codex 터미널(앞 판 결과 원문 첨부)
 ```
 
+- 결과를 받으면 리뷰 터미널을 바로 해제하고 닫는다(§5 3단계).
 - 읽기 전용이다. `git diff origin/<기준>...HEAD`, `git show <sha>`, `git log`만 쓴다.
 - 테스트·빌드는 돌리지 않는다. 구현자 게이트와 겹치고 부하만 늘기 때문이다.
 - 지적이 나오면 조율자가 결정한다. 그 결정은 구현 터미널 재사용으로 보낸다: `--terminal <구현 터미널> --worktree path:<wt>`.
@@ -209,6 +213,7 @@ orca orchestration worker-start --spec "$(cat $STATE/spec-diffrev-<slug>-N.md)" 
 
 ```sh
 orca orchestration worker-release --dispatch <그 터미널의 마지막 dispatch> --json
+orca terminal close --terminal <그 터미널> --json                                    # 해제만 하면 창은 남는다
 orca orchestration worker-list --run <run> --terminal-state reclaimable --json     # 0건이어야 끝
 orca worktree rm --worktree path:<구현 worktree> --json    # 로컬 브랜치도 지운다 — 머지·푸시 확인 뒤에만(머지 주체=사람이면 사람의 머지 완료 확인 뒤)
 ```
@@ -300,10 +305,10 @@ Claude·Codex 중 한쪽 한도가 다 되면 남은 쪽이 모든 역할을 맡
      - `worker_done`: 기대한 dispatch/task인지 대조한다. outcome과 filesModified를 확인하고, 산출물 파일을 직접 연다.
      - `question`: `reply --id <msg> --body "…"`로 답한다.
      - `escalation`: 판단해 처리한다.
-  3. 그 터미널의 다음 주인을 정한다. 셋 중 하나다.
-     - 같은 터미널로 다음 일을 보낸다.
-     - `worker-retain` — 곧 다시 쓴다.
-     - `worker-release` — 끝났다.
+  3. 그 터미널의 다음 주인을 정한다.
+     - **Codex 작업자(기획·검증·리뷰·재확인)는 항상 끝이다**: `worker-release` → `orca terminal close --terminal <터미널>`. 다음 판은 새 터미널로 띄운다.
+     - Claude 구현자는 셋 중 하나: 같은 터미널로 다음 일(수정 판)을 보낸다 / `worker-retain` — 곧 다시 쓴다 / `worker-release` — 끝났다(PR이 머지되면 `terminal close`까지).
+     - 사용량 한도로 멈춘 Codex 터미널도 대체 작업자를 띄우기 전에 `worker-stop` → `worker-release` → `terminal close`.
   4. 그다음에만 `check --ack <delivery>`를 한다.
 - 빈 대기가 세 번 이어지면 `worker-list --json`의 `projection.liveness`·`nextAction`을 본다.
   - 하트비트나 화면 활동은 「살아 있음」일 뿐, 「끝남」이 아니다.
@@ -364,3 +369,4 @@ Claude·Codex 중 한쪽 한도가 다 되면 남은 쪽이 모든 역할을 맡
    - 런을 만든다.
    - `ORCA_PIPE_STATE`·`ORCA_PIPE_RUN`을 정한다.
    - drain-loop를 백그라운드로 띄운다.
+22. Codex 작업자 터미널을 붙잡아 두면(retain) Orca 창과 Codex 앱 대화 목록에 「Report task outcome」 대화가 쌓인다. 기기를 다시 켜면 그 창들이 `codex resume … --dangerously-bypass-approvals-and-sandbox`로 다시 열려, 사람이 잘못 입력하면 승인 없이 사용량이 나간다(실제로 있었다, 사람이 「너무 많다」고 알렸다). Codex 작업자는 결과를 받으면 바로 해제하고 닫는다(§5 3단계).
