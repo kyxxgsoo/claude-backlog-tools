@@ -1,18 +1,19 @@
 ---
 name: orca-pipeline
-description: Orca 조율자 파이프라인 — 백로그 항목 하나를 계획(Codex) → 교차 검증(Claude, 최대 3판) → 승인 관문 → 구현(Claude, 새 worktree) → 차이 리뷰(Codex, 최대 2판) → PR·CI(git 서브에이전트) → 머지·릴리스(프로젝트 설정에 따라 서브에이전트 또는 사람) → 배포까지 몰고 간다. 기준 브랜치(trunk의 main / git-flow의 develop)와 머지 주체는 프로젝트 값으로 정한다. 사용자가 「오르카로 진행」「조율자로 백로그 진행」「계획·검증·구현·리뷰 파이프라인」을 요청할 때 쓴다.
+description: 현재 Codex 또는 Claude 세션이 조율자가 되는 Orca 파이프라인 — 백로그 항목 하나를 계획(Codex) → 교차 검증(Claude, 최대 3판) → 승인 관문 → 구현(Claude, 새 worktree) → 차이 리뷰(Codex, 최대 2판) → PR·CI(git 서브에이전트) → 머지·릴리스(프로젝트 설정에 따라 서브에이전트 또는 사람) → 배포까지 몰고 간다. 기준 브랜치(trunk의 main / git-flow의 develop)와 머지 주체는 프로젝트 값으로 정한다. 사용자가 「오르카로 진행」「조율자로 백로그 진행」「계획·검증·구현·리뷰 파이프라인」을 요청할 때 쓴다.
 ---
 
 # Orca 조율자 파이프라인
 
-이 세션(Orca 터미널 안의 Claude Code)이 **조율자**다. 조율자는 코드를 직접 쓰지 않는다. 작업자에게 일을 주고, 작업자 사이의 결정을 내리고, 출시·배포를 맡긴다. 머지를 누가 하는지는 `PROJECT.md` §머지 주체를 따른다.
+**사용자가 작업을 요청한 현재 세션이 조율자다. Codex 세션에서는 Codex, Claude Code 세션에서는 Claude가 맡는다.** 플러그인을 어느 도구에 설치했는지나 작업자 모델로 조율자를 정하지 않는다. 조율자를 바꾸려고 다른 공급자의 세션을 자동으로 열지 않는다. 조율자는 코드를 직접 쓰지 않는다. 작업자에게 일을 주고, 작업자 사이의 결정을 내리고, 출시·배포를 맡긴다. 머지를 누가 하는지는 `PROJECT.md` §머지 주체를 따른다.
 
 - **Orca CLI의 문법과 의미는 이 문서가 정본이 아니다.** 정본은 `orca skills get orchestration`(실행 파일과 버전이 맞는 안내서)이다. 둘이 다르면 Orca 안내서를 따른다. 이 문서는 그 위에 얹은 작업 순서·역할·지시서 형식·운영 요령이다.
 - **이 문서의 `<기준>`은 `PROJECT.md` §브랜치 전략의 기준 브랜치다.** trunk 프로젝트는 `main`, git-flow 프로젝트는 `develop`이다. 예시 명령의 `origin/<기준>`을 그 값으로 바꿔 쓴다.
 - **모델·effort는 `PROJECT.md` §모델을 따른다.** 작업자를 새로 띄울 때마다 역할과 난이도에 맞는 `--model`·`--effort`를 붙인다(§4.11). 금지 모델은 어떤 경우에도 쓰지 않는다.
 - **프로젝트마다 다른 값은 `PROJECT.md`에 둔다.** `PROJECT.template.md`를 복사해 채운다. 담는 값: 게이트 명령, 버전·결정 기록 규칙, git 규칙, 배포, 금지 구역, 서명 줄. 이 문서 본문은 특정 프로젝트를 모른다.
+- **시작 전에 `HOSTS.md`를 읽는다.** 현재 호스트의 도구·Orca 발신자 확인·대기·인계 방법을 따른다. 조율자 변경과 작업자 공급자 대체는 별개다.
 - 지시서 원형은 `TEMPLATES.md`에 있다. 보조 스크립트는 `scripts/`에 있다.
-- **경로 기준.** 이 스킬이 시작될 때 첫머리에 `Base directory for this skill: <경로>`가 주입된다. 이 문서의 `<키트>`는 그 **절대 경로**다. `TEMPLATES.md`·`PROJECT.template.md`·`scripts/`는 모두 그 아래에 있다(플러그인 캐시 안). 사용자 저장소는 지금 있는 곳(cwd)이고, 프로젝트 값 파일(`PROJECT.md`)은 프로젝트 쪽에 있다.
+- **경로 기준.** 이 문서의 `<키트>`는 지금 읽은 `SKILL.md`가 있는 **절대 경로**다. Claude의 `Base directory for this skill` 또는 Codex 스킬 목록의 파일 경로에서 찾는다. 주입 문구가 없다고 경로를 추측하지 않는다. `TEMPLATES.md`·`PROJECT.template.md`·`scripts/`는 모두 그 아래에 있다(플러그인 캐시 안). 사용자 저장소는 지금 있는 곳(cwd)이고, 프로젝트 값 파일(`PROJECT.md`)은 프로젝트 쪽에 있다.
 
 ## 1. 한 장 그림
 
@@ -51,13 +52,14 @@ description: Orca 조율자 파이프라인 — 백로그 항목 하나를 계�
 
 | 역할 | 에이전트 | 작업 공간 | 쓸 수 있는 것 | 끝 신호 |
 |---|---|---|---|---|
-| 조율자 | 이 세션(모델은 사용자가 `/model`로 고른 값 — 키트가 바꾸지 않는다) | main 체크아웃 | 지시서·결정 블록, 관문 해결, 배포, 난이도 판정 | — |
+| 조율자 | 현재 Codex 또는 Claude 세션(공급자·모델은 키트가 바꾸지 않는다) | main 체크아웃 | 지시서·결정 블록, 관문 해결, 배포, 난이도 판정 | — |
 | 기획 | codex | `current` | 계획서 1개 | `worker_done --report-path <계획서>` |
 | 교차 검증 | claude | `current` | 없음(읽기 전용) | `worker_done` 본문 = 지적 목록 또는 「지적 없음」 |
 | 구현 | claude | `new-top-level` | 그 worktree 전부. git은 서브에이전트로만, 푸시 금지 | `worker_done` 본문 = 커밋 해시·게이트 결과 등 |
 | 차이 리뷰 | codex | `path:<구현 wt>` | 없음(git은 diff/show/log만) | `worker_done` 본문 = 지적 목록 또는 「지적 없음」 |
-| 출시 | 조율자의 git 서브에이전트(Claude Code Agent) | main 체크아웃 + 구현 wt | 브랜치 푸시, PR. 머지·태그·릴리스는 `PROJECT.md` §머지 주체가 「서브에이전트」일 때만 | 서브에이전트 보고 |
+| 출시 | 현재 호스트의 git 담당 서브에이전트(`HOSTS.md`) | main 체크아웃 + 구현 wt | 브랜치 푸시, PR. 머지·태그·릴리스는 `PROJECT.md` §머지 주체가 「서브에이전트」일 때만 | 서브에이전트 보고 |
 
+- **기획·검증·구현·리뷰는 모두 실제 Orca 작업자**다. 기획·검증·구현·리뷰 자체를 호스트의 일반 서브에이전트로 대체하지 않는다. 구현 커밋과 출시의 git 작업은 그 작업을 요청하는 세션의 git 담당 서브에이전트에 맡기며, 이를 Orca Dispatch로 보고하지 않는다.
 - 각 작업자의 모델·effort는 `PROJECT.md` §모델의 「역할 × 난이도」 칸이다. 비어 있으면 그 에이전트의 전역 기본값을 따른다. 출시 서브에이전트의 모델도 같은 표에서 정한다.
 
 ## 4. 단계별 절차
@@ -67,13 +69,16 @@ description: Orca 조율자 파이프라인 — 백로그 항목 하나를 계�
 ### 4.0 준비
 
 ```sh
-orca status --json
-orca skills get orchestration                      # 버전 맞는 안내서를 먼저 읽는다
+orca skills get orchestration                      # 실제 CLI 선택은 HOSTS.md
+orca status --json                                # 자기 Orca 발신자 확인
+orca orchestration run-current --json              # 기존 바인딩 확인; 발신자 오류면 시작하지 않는다
 orca orchestration run-create --objective "<목표>" --json   # 이미 있으면 run-use --id <run>
 export ORCA_PIPE_STATE=<상태 폴더> ORCA_PIPE_RUN=<run_id>
 <키트>/scripts/drain-loop.sh                       # 백그라운드 상주(§5). 매 주기 limitwatch로 작업자 사용량 한도도 본다(§4.12)
 ```
 
+- 프로젝트 설정은 사용자가 지정한 경로를 우선한다. 지정이 없으면 `.claude/orca-pipeline.md`를 두 호스트가 함께 읽는다. Codex용 사본을 따로 만들지 않는다. 없으면 `PROJECT.template.md`를 프로젝트 규칙으로 채운 뒤 시작한다.
+- `$STATE/handles.txt` 첫 줄에 `coordinator=codex|claude`, 자기 Orca 핸들, run id, 프로젝트 설정 절대 경로를 남긴다. 역할은 현재 세션에서 확인하며 파일·환경 변수로 다른 공급자를 사칭하지 않는다.
 - 항목마다 **예비 난이도**(낮음/보통/높음)를 `PROJECT.md` §모델의 난이도 기준으로 정해 `$STATE/handles.txt`에 적는다. 기획·교차 검증 작업자는 이 예비 난이도로 띄운다. 구현·리뷰 난이도는 ④에서 확정한다(§4.11).
 - 런 하나에 여러 항목을 이어 담아도 된다. 항목 구분은 핸들 기록이 한다.
 - `$STATE/handles.txt`에 일마다 한 줄을 남긴다. 형식: `<slug>-<단계>\tdispatch=…\ttask=…\tterm=…`. 상태가 바뀌면 `retained`·`done+released`를 덧붙인다.
@@ -185,7 +190,7 @@ orca orchestration worker-start --spec "$(cat $STATE/spec-diffrev-<slug>-N.md)" 
   - worktree가 깨끗하다.
   - HEAD sha가 리뷰한 커밋과 같다.
   - `origin/<기준>`이 HEAD의 조상이다.
-- 그다음 Claude Code의 Agent 도구로 git 담당 서브에이전트를 띄운다. Agent 도구의 `model`은 `PROJECT.md` §모델의 「git 담당」 칸(난이도별)으로 준다. 지시는 `TEMPLATES.md` §8(머지 주체=서브에이전트) 또는 §8b(머지 주체=사람)를 따르고, 서브에이전트가 하는 일은 다음 차례다.
+- 그다음 `HOSTS.md`의 현재 호스트 방법으로 `PROJECT.md` §git 담당 서브에이전트를 띄운다. 지원되는 `model`·effort만 해당 호스트 칸에서 전달하고, 값이 없으면 현재 호스트의 기본값을 따른다. Claude의 모델 별칭을 Codex에 그대로 넘기지 않는다. 지시는 `TEMPLATES.md` §8(머지 주체=서브에이전트) 또는 §8b(머지 주체=사람)를 따르고, 서브에이전트가 하는 일은 다음 차례다.
   1. 머지 전 게이트를 다시 돈다.
   2. 브랜치를 푸시한다(강제 푸시 금지).
   3. PR을 만든다.
@@ -229,7 +234,7 @@ orca worktree rm --worktree path:<구현 worktree> --json    # 로컬 브랜치�
   - 작업자의 한도는 `limitwatch.sh`가 화면에서 잡아 `$STATE/limit-<공급자>.json`을 남기고, `waitreal.sh`가 `LIMIT`으로 끝나 조율자를 깨운다(§4.12 자동 감지). 사람이 알아채기를 기다리지 않는다.
   - 「기다림」일 때 한도는 실패가 아니다. 작업자 Dispatch를 멈추거나 버리거나 재시도하지 않는다. 하트비트가 끊겨 liveness가 `unverifiable`이 되는 것은 「확인 불가」일 뿐이다(§5).
   - 이어 갈 근거는 파일이다: `$STATE/handles.txt`, 지시서, 계획서 백업, 받은 out.json. 조율자 세션이 바뀌거나 압축돼도 이 파일들로 다시 선다.
-  - 재개 순서: `orca status --json` → `worker-list --run <run> --json`으로 각 작업자 상태 확인 → `ls $STATE/limit-*.json`으로 남은 한도 플래그 확인(`.cleared-`는 지난 것, §4.12) → 밀린 배달을 §5 순서로 처리(검증 → 다음 주인 → ack) → `waitreal.sh`·`drain-loop.sh`가 꺼졌으면 다시 띄운다.
+  - 재개 순서: `HOSTS.md`의 인계·자기 Run 바인딩 확인 → `orca status --json` → `worker-list --run <run> --json`으로 각 작업자 상태 확인 → `ls $STATE/limit-*.json`으로 남은 한도 플래그 확인(`.cleared-`는 지난 것, §4.12) → 밀린 배달을 §5 순서로 처리(검증 → 다음 주인 → ack) → `waitreal.sh`·`drain-loop.sh`가 꺼졌으면 다시 띄운다.
   - 조율자가 스스로 깨어날 수단이 있으면(예: Claude Code `/loop`, 예약 실행) 자리 비움 모드에서 켜 둔다. 없으면 사람이 돌아와 「이어서」라고 할 때 위 순서로 재개한다.
 
 ### 4.11 모델·effort 선택 (`PROJECT.md` §모델)
@@ -240,7 +245,7 @@ orca worktree rm --worktree path:<구현 worktree> --json    # 로컬 브랜치�
 - **새 터미널마다 지정한다.** `worker-start --agent <에이전트> --model <id> --effort <level>`. 표의 칸이 비어 있지 않으면 **모델을 반드시 명시한다** — 전역 기본값을 따라가면 사용자가 전역을 바꿀 때(예: 비싼 모델로) 작업자가 함께 바뀐다. `--effort`만 따로 줄 수 없다(`--model` 필요).
 - **터미널 재사용(`--terminal`)에는 `--model`·`--effort`를 줄 수 없다.** 수정 판은 처음 띄운 모델을 그대로 쓴다. 판 사이에 난이도가 바뀌어 모델을 바꿔야 하면 새 터미널을 띄우고, 앞 판 결과를 지시서에 원문 그대로 붙여 맥락을 넘긴다.
 - **적용 확인.** `worker-start` 응답의 `launch.requested`와 `launch.effective`를 비교하고 `$STATE/handles.txt`에 `model=<effective>/<effort>`로 남긴다. 요청한 값과 다르면 보고한다.
-- **금지 모델.** `PROJECT.md` §모델의 금지 목록에 있는 모델은 지정하지 않는다. `launch.effective`(또는 작업자 보고)에서 금지 모델이 확인되면 그 Dispatch를 `worker-stop`으로 멈추고, 올바른 모델로 `--retry-of` 재시작한 뒤 사람에게 보고한다. 서브에이전트(Agent 도구)의 `model`에도 금지 모델을 쓰지 않는다.
+- **금지 모델.** `PROJECT.md` §모델의 금지 목록에 있는 모델은 지정하지 않는다. `launch.effective`(또는 작업자 보고)에서 금지 모델이 확인되면 그 Dispatch를 `worker-stop`으로 멈추고, 올바른 모델로 `--retry-of` 재시작한 뒤 사람에게 보고한다. 현재 호스트의 git 서브에이전트 `model`에도 금지 모델을 쓰지 않는다.
 - **조율자 자신의 모델**은 사용자가 고른 세션 모델이다. 키트가 바꾸지 않는다. 금지 모델 세션이면 시작 전에 사용자에게 알린다.
 
 ### 4.12 모델 대체 — 한 공급자 한도 소진 시 (`PROJECT.md` §모델 대체)
@@ -273,14 +278,14 @@ Claude·Codex 중 한쪽 한도가 다 되면 남은 쪽이 모든 역할을 맡
 - **진행 중인 판.** 한도로 멈춘 것이 확인된 Dispatch만 `worker-stop` → `worker-start --retry-of <dispatch> --agent <남은 쪽> --model <표> [--effort <표>]`. 확인 안 된 작업자는 그대로 둔다.
 - **새 터미널로만 바꾼다.** `--terminal` 재사용으로는 모델을 못 바꾼다(§4.11). 앞 판 결과·결정 블록·지시서를 **원문 그대로** 새 지시서에 붙인다.
 - **쓰는 쪽과 보는 쪽을 다른 모델로.** 같은 공급자 안에서도 ①·⑤(쓰기)와 ②·⑥(보기)가 같은 모델이 되지 않게 표를 따른다.
-- **Codex 만 남으면 ⑧ git 담당은 조율자가 직접** 한다(Claude Code 플러그인 서브에이전트를 못 쓴다). 같은 규칙: 이슈·브랜치·커밋 형식·서명 줄, 기준·main 직접 푸시·강제 푸시 금지, 머지 주체 준수.
+- **작업자 공급자가 바뀌어도 조율자는 현재 세션에 남는다.** ⑧ git 담당은 `HOSTS.md`의 현재 호스트 도구를 쓴다. Codex라는 이유로 조율자가 git을 직접 하지 않는다. 도구가 없으면 그 단계의 막힘을 보고하고, 프로젝트가 명시적으로 허용한 대체 경로만 사용한다.
 - **적용 확인.** `launch.effective`가 표와 같은지 보고 `handles.txt`에 `model=<effective>/<effort>(대체)`로 남긴다.
 - **복귀.** 한도가 풀리면 다음 **새** 작업자부터 §모델 표로 돌아간다. 진행 중인 판은 대체 모델로 끝낸다.
   - 풀렸다는 근거: `resetHint` 시각이 지났다. 또는 그 공급자의 새 작업자가 정상 기동해 진행한다.
   - 근거가 서면 플래그를 `limit-<공급자>.cleared-<YYYYMMDDTHHMM>.json`으로 옮긴다. 지우지 않는다. 기록이고, limitwatch가 같은 dispatch를 다시 잡지 않게 읽는다.
   - 근거가 서지 않으면 플래그를 둔 채 대체 표를 계속 쓴다.
 
-**조율자 자신이 한도에 걸렸을 때.** 작업자는 계속 돌지만 결정·ack가 멈춘다. 사람이 다른 공급자(또는 한도가 풀린) 세션을 열고 `TEMPLATES.md` §9 인계 프롬프트를 붙여 넣는다. 새 조율자는 §4.10 재개 순서를 따르고, 앞 조율자의 루프가 살아 있으면 `touch $STATE/drain.stop`으로 먼저 끈다. 인계 프롬프트는 항목을 시작할 때 `$STATE/handoff.md`로 미리 채워 두고 판마다 갱신한다(조율자가 멈춘 뒤에는 쓸 수 없다).
+**조율자 자신이 한도에 걸렸을 때.** 작업자는 계속 돌지만 결정·ack가 멈춘다. 사람이 다른 공급자(또는 한도가 풀린) 세션을 열고 `TEMPLATES.md` §9 인계 프롬프트를 붙여 넣는다. 새 조율자는 `HOSTS.md`의 인계 절차로 앞 조율자의 소비 루프 종료와 자기 Run 바인딩을 먼저 확인한 뒤 §4.10으로 재개한다. 인계 프롬프트는 항목을 시작할 때 `$STATE/handoff.md`로 미리 채워 두고 판마다 갱신한다(조율자가 멈춘 뒤에는 쓸 수 없다).
 
 ## 5. 메시지 루프 — 조율자가 기다리는 법
 
@@ -296,7 +301,7 @@ Claude·Codex 중 한쪽 한도가 다 되면 남은 쪽이 모든 역할을 맡
     - 하트비트 묶음은 ack하고 계속 기다린다.
     - 진짜 메시지가 오면 파일에 남기고 끝난다(`REAL <delivery>`). ack는 하지 않는다.
     - 시작 뒤에 `$STATE/limit-<공급자>.json`이 쓰이면 끝난다(`LIMIT <파일>`). out.json에는 `{"type":"limit","files":[…]}`가 남는다. 배달이 아니므로 ack할 것이 없다. `REAL`과 함께 오면 두 줄을 다 찍는다.
-    - 끝나면 Claude Code가 조율자를 깨운다.
+    - 완료 확인은 `HOSTS.md`의 현재 호스트 대기 도구로 한다. 백그라운드 작업이 자동으로 세션을 깨운다고 가정하지 않는다.
     - `TIMEOUT`은 실패가 아니라 체크포인트다. 다시 띄운다.
 - `LIMIT`으로 깨어나면 §4.12 「깨어나면 바로 한다」를 따르고 waitreal을 다시 띄운다. `REAL`과 함께 찍혔으면 배달부터 아래 순서로 처리한다.
 - 진짜 메시지는 이 순서로 처리한다(Orca 안내서 「Completion accounting」).
@@ -343,7 +348,7 @@ Claude·Codex 중 한쪽 한도가 다 되면 남은 쪽이 모든 역할을 맡
 4. `orca worktree rm`은 로컬 브랜치도 지운다. 머지와 원격 푸시를 확인한 뒤에만 쓴다.
 5. zsh에서 `echo ======`는 `=cmd` 확장으로 깨진다. 따옴표로 감싼다. `--include=*.tsx` 같은 glob도 따옴표로 감싼다.
 6. macOS에는 `timeout` 명령이 없다.
-7. Claude Code에서 포그라운드 `sleep`을 이어 붙이면 막힌다. 기다림은 백그라운드 스크립트(waitreal)로 한다.
+7. 대기·빌드는 현재 호스트의 백그라운드 실행/세션 도구로 시작하고, 반환된 핸들로 완료를 확인한다(`HOSTS.md`). 포그라운드 `sleep`을 이어 붙이지 않는다.
 8. CI 러너가 같은 기계에 있으면 부하 실험·무거운 테스트가 PR CI를 깨뜨린다. 출시 지시에 CI 시작 시점의 부하(`sysctl vm.loadavg` 등)를 기록하게 한다.
 9. 리뷰 반영이 새 결정을 낳으면 구현자가 같은 PR에 결정 기록을 하나 더 만들 수 있다. 받아들이고, 이후 임시 번호를 한 칸씩 민다.
 10. main 체크아웃에 추적되지 않는 계획서가 있고 브랜치가 같은 경로를 커밋하면 `pull --ff-only`가 막힌다. 지우지 말고 상태 폴더로 옮긴다.
@@ -361,9 +366,9 @@ Claude·Codex 중 한쪽 한도가 다 되면 남은 쪽이 모든 역할을 맡
 
 ## 9. 새 프로젝트로 옮기는 순서
 
-1. 플러그인을 설치한다(기기마다 한 번): `/plugin marketplace add kyxxgsoo/claude-backlog-tools` → `/plugin install orca-pipeline@kyxxgsoo-tools`. git 담당으로 `git-flow@kyxxgsoo-git-flow`도 설치한다. 손으로 복사한 `~/.claude/skills/orca-pipeline/`이 있으면 지운다(같은 이름의 스킬이 둘 뜬다).
+1. 플러그인을 설치한다(기기마다 한 번): `/plugin marketplace add kyxxgsoo/claude-backlog-tools` → `/plugin install orca-pipeline@kyxxgsoo-tools`. Claude에서 git 담당으로 `git-flow@kyxxgsoo-git-flow`를 쓰면 설치한다. Codex에서는 현재 세션이 제공하는 git 담당 서브에이전트/지시서를 사용한다(`HOSTS.md`). 손으로 복사한 `~/.claude/skills/orca-pipeline/`이 있으면 지운다(같은 이름의 스킬이 둘 뜬다).
 2. `PROJECT.template.md`를 프로젝트에 복사해 채운다. 예: `.claude/orca-pipeline.md`. 게이트·git·브랜치 전략·머지 주체·진행 방식·모델·배포·금지 구역이 비어 있으면 출발하지 않는다(§모델은 「전역 기본값 사용」도 값이다).
-3. 새 세션(Orca 터미널 안의 Claude Code)에 지시한다: 「orca-pipeline 스킬로 <항목>을 진행해. 프로젝트 값은 <경로>.」
+3. 새 세션(자기 Orca 발신자가 확인되는 Codex 또는 Claude Code)에 지시한다: 「orca-pipeline 스킬로 <항목>을 진행해. 프로젝트 값은 <경로>.」
 4. 첫 실행 점검
    - `orca status --json`과 `orca skills get orchestration`을 돌린다.
    - 런을 만든다.

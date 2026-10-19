@@ -106,7 +106,8 @@ MIT
 
 # orca-pipeline
 
-Orca 조율자 파이프라인 — 이 세션(Orca 터미널 안의 Claude Code)이 조율자가 되어
+Orca 조율자 파이프라인 — **현재 세션이 조율자**가 된다. Codex에서 시작하면 Codex,
+Claude Code에서 시작하면 Claude가 맡는다. 공통 프로젝트 설정을 읽고
 Orca 워커로 **계획(Codex) → 교차 검증(Claude, 최대 3판) → 승인 관문 → 구현(Claude,
 새 worktree) → 차이 리뷰(Codex, 최대 2판) → 출시(git 서브에이전트) → 배포**를 돈다.
 서로 다른 모델이 서로를 검증하고, 결정은 조율자만 내린다.
@@ -119,15 +120,23 @@ claude plugin install orca-pipeline@kyxxgsoo-tools
 claude plugin install git-flow@kyxxgsoo-git-flow   # 출시 단계의 git 담당
 ```
 
-전제: Orca 앱과 CLI(`orca`), `codex` CLI(로그인), Orca 터미널 안에서 연
-Claude Code 세션. 손으로 복사해 둔 `~/.claude/skills/orca-pipeline/`이 있으면 지운다.
+전제: Orca 앱과 CLI, 작업자로 사용할 Codex·Claude CLI의 로그인, **현재 세션의
+Orca 발신자 연결**. Claude 플러그인 설치와 발신자 연결은 별개다. Codex도 같은
+`plugins/orca-pipeline/skills/orca-pipeline/` 스킬을 읽는다. Codex에 이미 플러그인이
+노출되어 있으면 중복 설치하지 않는다. 없으면 Codex의 스킬 설치 경로에 그 폴더
+전체를 설치한다(HOSTS·TEMPLATES·scripts도 함께 필요하다).
+
+Orca 밖의 채팅에서 `no_active_sender_terminal`이 나오면 설정 준비까지만 가능하다.
+같은 공급자의 Orca 세션에서 실행하거나 지원되는 자기 세션 연결을 먼저 해야 한다.
+다른 터미널 핸들을 빌려 실행하지 않는다. 상세: [HOSTS.md](plugins/orca-pipeline/skills/orca-pipeline/HOSTS.md).
 
 ## 프로젝트마다 한 번
 
 스킬 폴더의 `PROJECT.template.md`를 프로젝트에 복사해 채운다(예:
 `.claude/orca-pipeline.md`). 게이트·git·**브랜치 전략**(trunk `main` / git-flow
 `develop`)·**머지 주체**(서브에이전트 / 사람)·배포·금지 구역이 비어 있으면 출발하지
-않는다. 그다음 세션에 이렇게 말한다:
+않는다. `.claude/`라는 이름이어도 두 호스트가 이 파일 하나를 공유한다. 조율자를
+프로젝트마다 고정하지 않는다. 그다음 어느 호스트에서든 이렇게 말한다:
 
 > orca-pipeline 스킬로 <항목>을 진행해. 프로젝트 값은 .claude/orca-pipeline.md.
 
@@ -136,7 +145,12 @@ Claude Code 세션. 손으로 복사해 둔 `~/.claude/skills/orca-pipeline/`이
 | 파일 | 내용 |
 |------|------|
 | `SKILL.md` | 구조, 역할 표, 단계별 명령, 메시지 루프, 결정 블록, 운영 교훈 |
+| `HOSTS.md` | Codex·Claude 도구 차이, 자기 Orca 발신자 확인, 기존 Run 인계 |
 | `TEMPLATES.md` | 지시서 원형 — 계획 · 교차 검증 · 계획 수정 · 관문 · 구현 · 차이 리뷰 · 구현 수정 · 출시(§8 서브에이전트 머지 / §8b 사람 머지) |
 | `PROJECT.template.md` | 프로젝트마다 채울 값 |
 | `scripts/` | `classify.py` · `drain.sh` · `drain-loop.sh` · `waitreal.sh` · `showcheck.py` — 하트비트가 받은편지함을 막지 않게 하는 메시지 루프 보조. `limitwatch.sh` · `limitmatch.py` — 작업자 화면의 사용량 한도 문구를 잡아 조율자를 깨운다(모델 대체, `scripts/test/limitwatch-test.sh`로 확인). 경로와 런 id는 환경 변수(`ORCA_PIPE_STATE`·`ORCA_PIPE_RUN`)로 받는다 |
 
+
+## orca-pipeline 변경 기록
+
+- **0.6.0** — 현재 Codex/Claude 세션이 메인 조율자를 맡는다. 출시 도구와 대기 방법을 호스트별로 구분하고, 공유 프로젝트 설정·기존 Run 인계·발신자 확인 절차를 추가했다. Codex에서 git을 직접 하도록 하던 예외를 없앴다. Orca 밖의 미등록 채팅은 실행 완료로 보고하지 않는다.

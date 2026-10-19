@@ -12,6 +12,12 @@
   - 예(Karvis): `.omc/plans/<slug>-v1.md`. main 체크아웃에 추적되지 않는 파일로 둔다. 구현 브랜치가 같은 경로로 커밋한다.
 - 상태 폴더(`ORCA_PIPE_STATE`): <조율자 세션 스크래치패드 등>
 
+## 조율자
+- 선택: 현재 세션. Codex에서 요청하면 Codex, Claude Code에서 요청하면 Claude.
+- 프로젝트 설정: 두 호스트가 이 파일 하나를 공유한다. 경로 이름이 `.claude/`여도 Claude 전용이 아니다.
+- 실행 전제: 현재 세션 자신의 Orca 발신자가 확인되어야 한다(`HOSTS.md`). 외부 채팅에서 미등록이면 실제 Orca 실행 전까지만 준비한다.
+- 인계: 기존 Run·Task·Dispatch를 보존하고, 이전 소비 루프 종료와 새 조율자의 Run 바인딩을 확인한 뒤 재개한다.
+
 ## 브랜치 전략
 <trunk 또는 git-flow. 조율자는 SKILL.md의 `<기준>`을 여기 값으로 바꿔 쓴다>
 - 방식: <trunk | git-flow>
@@ -38,14 +44,15 @@
 | ② 교차 검증 | <claude / … / …> | | |
 | ⑤ 구현 | <claude / … / …> | | |
 | ⑥ 차이 리뷰 | <codex / … / …> | | |
-| ⑧ git 담당(서브에이전트) | <haiku·sonnet·opus> | | |
+| ⑧ git 담당 — Claude 호스트 | 전역 기본값 사용 | 전역 기본값 사용 | 전역 기본값 사용 |
+| ⑧ git 담당 — Codex 호스트 | 전역 기본값 사용 | 전역 기본값 사용 | 전역 기본값 사용 |
 
 - 예(Karvis): 비움 — 전역 기본값 사용.
 
 ## 모델 대체
 <한 공급자(Claude 또는 Codex)의 사용량 한도가 확인됐을 때 남은 쪽으로 모든 역할을 맡기는 표. SKILL.md §4.12. 비우면 대체하지 않고 기다린다(§진행 방식)>
 - 모델 ID 표기: <예: Claude — `claude-opus-5-5`(Opus 5.5) · `claude-sonnet-5-5` · `claude-haiku-4-5` / Codex — `gpt-6.1-sol` · `gpt-6-luna`>
-- ⑧ git 담당 서브에이전트(Agent 도구)의 `model`은 별칭만 받는다: <예: `claude-sonnet-5-5` → `sonnet`>
+- Claude 호스트의 git 담당 `model`은 해당 Agent 도구의 지원값을 따른다. Codex 호스트에는 이 별칭을 넘기지 않는다: <예: `claude-sonnet-5-5` → `sonnet`>
 
 ### Claude 만 남았을 때 (Codex 한도)
 
@@ -55,7 +62,8 @@
 | ② 교차 검증 | <claude / … / …> | | |
 | ⑤ 구현 | <claude / … / …> | | |
 | ⑥ 차이 리뷰 | <claude / … / …> | | |
-| ⑧ git 담당(서브에이전트) | <haiku·sonnet·opus> | | |
+| ⑧ git 담당 — Claude 호스트 | 전역 기본값 사용 | 전역 기본값 사용 | 전역 기본값 사용 |
+| ⑧ git 담당 — Codex 호스트 | 전역 기본값 사용 | 전역 기본값 사용 | 전역 기본값 사용 |
 
 ### Codex 만 남았을 때 (Claude 한도)
 
@@ -65,7 +73,7 @@
 | ② 교차 검증 | <codex / … / …> | | |
 | ⑤ 구현 | <codex / … / …> | | |
 | ⑥ 차이 리뷰 | <codex / … / …> | | |
-| ⑧ git 담당 | 조율자가 직접(같은 git 규칙) — Claude 플러그인 서브에이전트를 못 쓴다 | | |
+| ⑧ git 담당 | 현재 호스트의 서브에이전트(`HOSTS.md`) | 동일 | 동일 |
 
 - 같은 단계에서 쓰는 쪽(①·⑤)과 보는 쪽(②·⑥)은 **다른 모델**로 엇갈리게 채운다.
 - 예(웨딩챌린저): Claude 만 — 쓰는 쪽 Opus/Sonnet·보는 쪽 Sonnet/Haiku. Codex 만 — sol(high) ↔ luna(max) 엇갈림.
@@ -140,6 +148,9 @@
 - 예(Karvis): `pnpm adr:check` · `pnpm version:check` · `pnpm scripts:test` · `pnpm wiki:check`
 
 ## git 담당
+- Claude 호스트: <Agent 도구의 담당 역할·지시서 경로>
+- Codex 호스트: <제공된 서브에이전트 도구의 담당 역할·지시서 경로>
+- 필요한 도구가 없을 때: 막힘을 보고한다. 직접 실행은 프로젝트가 명시적으로 허용했을 때만 한다.
 - 예(Karvis): `git-flow-manager` 서브에이전트만 git을 쓴다(작업자도 커밋은 이 서브에이전트로 한다).
 
 ## 원격 브랜치 이름 규칙
@@ -153,7 +164,7 @@
 - 예: `Co-Authored-By: <모델> <noreply@anthropic.com>` + `Claude-Session: <세션 URL>`
 
 ## PR 서명 줄
-- 예: `🤖 Generated with [Claude Code](https://claude.com/claude-code)` + 빈 줄 + `<세션 URL>`
+- 실제 조율자 호스트를 적는다. Codex 결과에 Claude 서명을 복사하지 않는다. 세션 URL이 없으면 지어내지 않는다.
 
 ## CI 부하 기록
 <CI 러너가 같은 기계면 필수>
@@ -188,7 +199,8 @@
 - 기본: 사람 상주 / 자리 비움 — 관문으로만 묻고, 관문이 아닌 일로는 멈추지 않는다
 - 사용량 한도: <기다림 | 대체> — 기다림: 갱신을 기다렸다가 이어 간다(작업자를 멈추거나 재시도하지 않는다). 대체: 한도가 **확인되면** §모델 대체 표로 남은 공급자에게 넘긴다(SKILL.md §4.12)
   - 대체는 자동이다. `drain-loop.sh`의 limitwatch가 작업자 화면의 한도 문구를 잡아 `$STATE/limit-<공급자>.json`을 쓰고 조율자를 깨운다. 조율자는 사람에게 묻지 않고 넘긴다. 사람이 할 일은 이 값을 「대체」로 두고 §모델 대체 표를 채우는 것뿐이다.
-- 스스로 깨어날 수단: <예: `/loop`, 예약 실행, 없음>
+- 대기 도구: 현재 호스트에서 제공되는 백그라운드 실행과 세션 재개 도구(`HOSTS.md`).
+- 스스로 깨어날 수단: <실제로 제공되는 기능 또는 없음>
 - 예(Karvis): 자리 비움. 질문은 관문으로만 하고 관문이 아닌 일로는 멈추지 않는다. 사용량 한도에 걸리면 갱신을 기다렸다가 이어 간다.
 
 ## 위임
