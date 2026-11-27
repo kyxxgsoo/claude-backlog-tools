@@ -1,6 +1,6 @@
 {
   "name": "orca-pipeline",
-  "version": "0.6.0",
+  "version": "0.7.0",
   "description": "현재 Codex 또는 Claude 세션이 조율자가 되는 Orca 파이프라인. 계획·검증·구현·리뷰는 Orca 작업자로, 출시는 현재 호스트의 git 담당으로 실행한다. 프로젝트 설정과 인계 기록을 공유한다.",
   "author": {
     "name": "KyungsooLee"
